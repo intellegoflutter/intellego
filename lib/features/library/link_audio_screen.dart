@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,6 +20,7 @@ class LinkAudioScreen extends ConsumerStatefulWidget {
 
 class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
   final _url = TextEditingController();
+  File? _audio;
   bool _busy = false;
   String? _status;
   String? _error;
@@ -25,6 +29,12 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
   void dispose() {
     _url.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAudio() async {
+    final picked = await FilePicker.pickFiles(type: FileType.audio);
+    final path = picked.isEmpty ? null : picked.first.path;
+    if (path != null && mounted) setState(() => _audio = File(path));
   }
 
   Future<void> _link(Book book) async {
@@ -39,6 +49,13 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
           'Aligning ${book.sentences.length} sentences with ${captions.cues.length} subtitle lines…');
       final linked = await ref.read(audioLinkerProvider).link(book, captions);
       await ref.read(booksProvider.notifier).updateBook(linked);
+      final audio = _audio;
+      if (audio != null) {
+        setState(() => _status = 'Copying the audio file…');
+        final id = linked.audio!.videoId;
+        await ref.read(audioStoreProvider).importFile(id, audio);
+        ref.invalidate(audioFileProvider(id));
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -73,6 +90,19 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
               border: OutlineInputBorder(),
             ),
             onSubmitted: (_) => _link(book),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.folder_open),
+            label: Text(_audio == null
+                ? 'Choose audio file… (optional)'
+                : _audio!.uri.pathSegments.last),
+            onPressed: _busy ? null : _pickAudio,
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 6, left: 12),
+            child: Text('The audiobook file on this device. You can also add it '
+                'later from the book.'),
           ),
           const SizedBox(height: 16),
           FilledButton(
