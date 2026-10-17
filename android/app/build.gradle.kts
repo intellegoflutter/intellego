@@ -29,11 +29,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // CI supplies a permanent key (see .github/workflows/android.yml) so that
+    // every build is signed alike and installs over the previous one.
+    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")
+    if (releaseKeystore != null) {
+        signingConfigs.create("release") {
+            storeFile = file(releaseKeystore)
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = "intellego"
+            keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Local builds without the key fall back to the debug key.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(

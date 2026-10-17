@@ -50,3 +50,5 @@ app.*.map.json
 
 # Local model cache for tests
 /.model_cache/
+*.jks
+*.keystore
