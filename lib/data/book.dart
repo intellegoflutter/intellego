@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../features/youtube/caption_models.dart';
 
 class BookSentence {
@@ -72,16 +74,44 @@ class BookSentence {
 }
 
 /// The YouTube audiobook linked to a book.
-class LinkedAudio {
-  const LinkedAudio({
-    required this.videoId,
-    required this.videoTitle,
-    required this.sentences,
-    this.anchors = const [],
-  });
+/// One audio file of a [LinkedAudio]: the Ukrainian sentences from index
+/// [from] up to the next part belong to it.
+class AudioPart {
+  const AudioPart({required this.videoId, required this.title, required this.from});
 
   final String videoId;
-  final String videoTitle;
+  final String title;
+  final int from;
+
+  Map<String, dynamic> toJson() => {'videoId': videoId, 'title': title, 'from': from};
+
+  factory AudioPart.fromJson(Map<String, dynamic> j) => AudioPart(
+      videoId: j['videoId'] as String,
+      title: j['title'] as String? ?? '',
+      from: j['from'] as int? ?? 0);
+}
+
+class LinkedAudio {
+  const LinkedAudio({
+    required this.parts,
+    required this.sentences,
+    this.anchors = const [],
+  }) : assert(parts.length > 0);
+
+  /// A book recorded in one file.
+  LinkedAudio.single({
+    required String videoId,
+    required String videoTitle,
+    required this.sentences,
+    this.anchors = const [],
+  }) : parts = [AudioPart(videoId: videoId, title: videoTitle, from: 0)];
+
+  /// The audio files, in reading order. Their sentences follow each other in
+  /// [sentences]; the times of a sentence are relative to its own file.
+  final List<AudioPart> parts;
+
+  String get videoId => parts.first.videoId;
+  String get videoTitle => parts.first.title;
 
   /// Ukrainian sentences with their position in the audio.
   final List<TimedText> sentences;
@@ -89,10 +119,26 @@ class LinkedAudio {
   /// User-confirmed `(ruSentenceIndex, ukSentenceIndex)` pairs.
   final List<(int, int)> anchors;
 
-  /// Index of the Ukrainian sentence spoken at [ms] (the last one starting
-  /// at or before it), or null before the first.
-  int? indexAt(int ms) {
-    var lo = 0, hi = sentences.length - 1, found = -1;
+  /// Index into [parts] of the file that holds Ukrainian sentence [uk].
+  int partOf(int uk) {
+    var part = 0;
+    for (var k = 1; k < parts.length; k++) {
+      if (parts[k].from <= uk) part = k;
+    }
+    return part;
+  }
+
+  /// Ukrainian sentences `[from, to)` of part [part].
+  (int, int) partRange(int part) => (
+        parts[part].from,
+        part + 1 < parts.length ? parts[part + 1].from : sentences.length,
+      );
+
+  /// Index of the Ukrainian sentence spoken at [ms] in part [part] (the last
+  /// one starting at or before it), or null before the first.
+  int? indexAt(int ms, {int part = 0}) {
+    final (from, to) = partRange(part);
+    var lo = from, hi = to - 1, found = -1;
     while (lo <= hi) {
       final mid = (lo + hi) >> 1;
       if (sentences[mid].startMs <= ms) {
@@ -105,24 +151,39 @@ class LinkedAudio {
     return found < 0 ? null : found;
   }
 
-  LinkedAudio copyWith({List<TimedText>? sentences, List<(int, int)>? anchors}) =>
+  LinkedAudio copyWith({
+    List<TimedText>? sentences,
+    List<AudioPart>? parts,
+    List<(int, int)>? anchors,
+  }) =>
       LinkedAudio(
-        videoId: videoId,
-        videoTitle: videoTitle,
+        parts: parts ?? this.parts,
         sentences: sentences ?? this.sentences,
         anchors: anchors ?? this.anchors,
       );
 
   Map<String, dynamic> toJson() => {
+        // The first part also under the old keys, so older app versions can
+        // still read the book.
         'videoId': videoId,
         'videoTitle': videoTitle,
+        'parts': [for (final p in parts) p.toJson()],
         'sentences': [for (final s in sentences) s.toJson()],
         'anchors': [for (final a in anchors) [a.$1, a.$2]],
       };
 
   factory LinkedAudio.fromJson(Map<String, dynamic> j) => LinkedAudio(
-        videoId: j['videoId'] as String,
-        videoTitle: j['videoTitle'] as String? ?? '',
+        parts: j['parts'] == null
+            ? [
+                AudioPart(
+                    videoId: j['videoId'] as String,
+                    title: j['videoTitle'] as String? ?? '',
+                    from: 0)
+              ]
+            : [
+                for (final p in j['parts'] as List)
+                  AudioPart.fromJson(p as Map<String, dynamic>)
+              ],
         sentences: [
           for (final s in j['sentences'] as List)
             TimedText.fromJson(s as Map<String, dynamic>)
@@ -203,10 +264,24 @@ class Book {
 
   /// Audio interval `(startMs, endMs)` of sentence [i], or null.
   (int, int)? audioRangeFor(int i) {
+    final seg = audioSegmentFor(i);
+    return seg == null ? null : (seg.startMs, seg.endMs);
+  }
+
+  /// The audio file and interval of sentence [i], or null. When the
+  /// sentence straddles two parts only the piece in the first is returned.
+  ({String videoId, int part, int startMs, int endMs})? audioSegmentFor(int i) {
     final s = sentences[i];
     final a = audio;
     if (a == null || !s.hasAudio) return null;
-    return (a.sentences[s.ukFrom!].startMs, a.sentences[s.ukTo! - 1].endMs);
+    final part = a.partOf(s.ukFrom!);
+    final last = math.min(s.ukTo!, a.partRange(part).$2) - 1;
+    return (
+      videoId: a.parts[part].videoId,
+      part: part,
+      startMs: a.sentences[s.ukFrom!].startMs,
+      endMs: a.sentences[last].endMs,
+    );
   }
 
   /// Index of the Russian sentence whose audio contains [ms], or null.

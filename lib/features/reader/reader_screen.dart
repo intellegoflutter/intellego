@@ -29,25 +29,28 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   int? _playing;
   bool _busy = false;
   double? _downloadProgress;
+  int _playingPart = 0;
 
   Future<void> _play(Book book, int i) async {
-    final range = book.audioRangeFor(i);
-    if (range == null) return;
-    final file = await ref.read(audioFileProvider(book.audio!.videoId).future);
+    final seg = book.audioSegmentFor(i);
+    if (seg == null) return;
+    final file = await ref.read(audioFileProvider(seg.videoId).future);
     if (file == null) {
       _toast('Add the audio file first (banner at the top).');
       return;
     }
-    setState(() => _playing = i);
+    setState(() {
+      _playing = i;
+      _playingPart = seg.part;
+    });
     try {
-      await ref.read(segmentPlayerProvider).playSegment(file.path, range.$1, range.$2);
+      await ref.read(segmentPlayerProvider).playSegment(file.path, seg.startMs, seg.endMs);
     } catch (e) {
       _toast('Playback failed: $e');
     }
   }
 
-  Future<void> _downloadAudio(Book book) async {
-    final id = book.audio!.videoId;
+  Future<void> _downloadAudio(String id) async {
     setState(() => _downloadProgress = 0);
     try {
       await ref.read(audioDownloaderProvider).download(id,
@@ -61,8 +64,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  Future<void> _pickAudio(Book book) async {
-    final id = book.audio!.videoId;
+  Future<void> _pickAudio(String id) async {
     final picked = await FilePicker.pickFiles(type: FileType.audio);
     final path = picked.isEmpty ? null : picked.first.path;
     if (path == null) return;
@@ -86,7 +88,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Future<void> _syncHere(Book book, int i) async {
     final audio = book.audio;
     if (audio == null) return;
-    final uk = audio.indexAt(ref.read(segmentPlayerProvider).currentMs);
+    final uk = audio.indexAt(ref.read(segmentPlayerProvider).currentMs, part: _playingPart);
     if (uk == null) {
       _toast('Play the audio first, then choose "Sync here".');
       return;
@@ -239,6 +241,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 case 'link':
                   await Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => LinkAudioScreen(bookId: book.id)));
+                case 'part':
+                  await Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => LinkAudioScreen(bookId: book.id, addPart: true)));
                 case 'copy':
                   await _copyUkrainian(book);
                 case 'paste':
@@ -254,6 +259,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               if (canAddPages(book))
                 const PopupMenuItem(value: 'more', child: Text('Add more pages…')),
               PopupMenuItem(value: 'link', child: Text(hasAudio ? 'Change audiobook' : 'Link audiobook')),
+              if (hasAudio)
+                const PopupMenuItem(value: 'part', child: Text('Add next audio part…')),
               if (hasAudio) ...const [
                 PopupMenuItem(value: 'copy', child: Text('Copy Ukrainian text')),
                 PopupMenuItem(value: 'paste', child: Text('Paste corrected Ukrainian')),
@@ -281,34 +288,45 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Widget _audioBanner(Book book) {
-    final file = ref.watch(audioFileProvider(book.audio!.videoId));
-    if (file.isLoading || file.value != null) return const SizedBox.shrink();
+    final audio = book.audio!;
+    final missing = <int>[];
+    for (var k = 0; k < audio.parts.length; k++) {
+      final file = ref.watch(audioFileProvider(audio.parts[k].videoId));
+      if (!file.isLoading && file.value == null) missing.add(k);
+    }
+    if (missing.isEmpty) return const SizedBox.shrink();
     final downloading = _downloadProgress != null;
     return Card(
       margin: const EdgeInsets.all(8),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('The audio is not on this device yet. Playing sentences '
-              'needs the audiobook file.'),
-          const SizedBox(height: 8),
-          if (downloading)
-            LinearProgressIndicator(
-                value: _downloadProgress == 0 ? null : _downloadProgress)
-          else
-            Wrap(spacing: 8, children: [
-              if (YtDlpDownloader.supported)
-                FilledButton.icon(
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download from YouTube'),
-                  onPressed: () => _downloadAudio(book),
+          for (final k in missing) ...[
+            Text(audio.parts.length == 1
+                ? 'The audio is not on this device yet. Playing sentences '
+                    'needs the audiobook file.'
+                : 'Part ${k + 1} of the audio is not on this device yet'
+                    '${audio.parts[k].title.isEmpty ? '' : ': ${audio.parts[k].title}'}.'),
+            const SizedBox(height: 8),
+            if (downloading)
+              LinearProgressIndicator(
+                  value: _downloadProgress == 0 ? null : _downloadProgress)
+            else
+              Wrap(spacing: 8, children: [
+                if (YtDlpDownloader.supported)
+                  FilledButton.icon(
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download from YouTube'),
+                    onPressed: () => _downloadAudio(audio.parts[k].videoId),
+                  ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Choose audio file…'),
+                  onPressed: () => _pickAudio(audio.parts[k].videoId),
                 ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.folder_open),
-                label: const Text('Choose audio file…'),
-                onPressed: () => _pickAudio(book),
-              ),
-            ]),
+              ]),
+            if (k != missing.last) const SizedBox(height: 12),
+          ],
         ]),
       ),
     );

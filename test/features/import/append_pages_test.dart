@@ -39,7 +39,7 @@ void main() {
     expect(first.nextPage, 3);
     var book = first
         .withTranslations([Translation(name: 'EN', lines: List.filled(first.sentences.length, 'x'))])
-        .withAudio(const LinkedAudio(videoId: 'v', videoTitle: 'T', sentences: [], anchors: [(1, 2)]));
+        .withAudio(LinkedAudio.single(videoId: 'v', videoTitle: 'T', sentences: [], anchors: [(1, 2)]));
     final before = book.sentences.length;
     requested.clear();
 

@@ -10,9 +10,12 @@ import '../../data/book.dart';
 /// Pastes a YouTube link, downloads its subtitles and aligns them with the
 /// book's sentences.
 class LinkAudioScreen extends ConsumerStatefulWidget {
-  const LinkAudioScreen({super.key, required this.bookId});
+  const LinkAudioScreen({super.key, required this.bookId, this.addPart = false});
 
   final String bookId;
+
+  /// Appends another recording of the audiobook instead of replacing it.
+  final bool addPart;
 
   @override
   ConsumerState<LinkAudioScreen> createState() => _LinkAudioScreenState();
@@ -52,12 +55,15 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
       final captions = await ref.read(captionSourceProvider).fetch(_url.text);
       setState(() => _status =
           'Aligning ${book.sentences.length} sentences with ${captions.cues.length} subtitle lines…');
-      final linked = await ref.read(audioLinkerProvider).link(book, captions);
+      final linker = ref.read(audioLinkerProvider);
+      final linked = widget.addPart
+          ? await linker.addPart(book, captions)
+          : await linker.link(book, captions);
       await ref.read(booksProvider.notifier).updateBook(linked);
       final audio = _audio;
       if (audio != null) {
         setState(() => _status = 'Copying the audio file…');
-        final id = linked.audio!.videoId;
+        final id = captions.videoId;
         await ref.read(audioStoreProvider).importFile(id, audio);
         ref.invalidate(audioFileProvider(id));
       }
@@ -78,7 +84,7 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
         .firstOrNull;
     if (book == null) return Scaffold(appBar: AppBar());
     return Scaffold(
-      appBar: AppBar(title: const Text('Link audiobook')),
+      appBar: AppBar(title: Text(widget.addPart ? 'Add next audio part' : 'Link audiobook')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

@@ -52,12 +52,15 @@ class LibraryScreen extends ConsumerWidget {
                       title: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
                           '${b.practicedCount}/${b.sentences.length} sentences practiced'
-                          '${b.audio == null ? '' : ' · audio linked'}'),
+                          '${b.audio == null ? '' : b.audio!.parts.length > 1 ? ' · audio linked (${b.audio!.parts.length} parts)' : ' · audio linked'}'),
                       trailing: PopupMenuButton<String>(
                         onSelected: (v) {
                           if (v == 'link') {
                             Navigator.of(context).push(MaterialPageRoute<void>(
                                 builder: (_) => LinkAudioScreen(bookId: b.id)));
+                          } else if (v == 'part') {
+                            Navigator.of(context).push(MaterialPageRoute<void>(
+                                builder: (_) => LinkAudioScreen(bookId: b.id, addPart: true)));
                           } else if (v == 'more') {
                             showDialog<void>(
                                 context: context,
@@ -72,6 +75,8 @@ class LibraryScreen extends ConsumerWidget {
                               child: Text(b.audio == null
                                   ? 'Link audiobook (YouTube)'
                                   : 'Change audiobook')),
+                          if (b.audio != null)
+                            const PopupMenuItem(value: 'part', child: Text('Add next audio part…')),
                           if (canAddPages(b))
                             const PopupMenuItem(value: 'more', child: Text('Add more pages…')),
                           const PopupMenuItem(value: 'delete', child: Text('Delete')),

@@ -24,8 +24,14 @@ List<(int q, int r)>? coarseAnchors(
   double matchThreshold = 0.04,
   double gapCost = 0.04,
 }) {
-  final rb = _blocks(ruLen, blockChars);
-  final ub = _blocks(ukLen, blockChars);
+  // Whole books on both sides would need a huge matrix: use coarser blocks.
+  var rb = _blocks(ruLen, blockChars);
+  var ub = _blocks(ukLen, blockChars);
+  while (rb.length * ub.length > 5000000) {
+    blockChars = blockChars * 3 ~/ 2;
+    rb = _blocks(ruLen, blockChars);
+    ub = _blocks(ukLen, blockChars);
+  }
   final n = rb.length, m = ub.length;
   if (n < 4 || m < 4) return null;
 

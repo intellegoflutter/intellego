@@ -23,14 +23,21 @@ void main(List<String> args) {
   final pages = (jsonDecode(File(args[0]).readAsStringSync()) as List)
       .map((p) => (p as List).cast<String>())
       .toList();
-  final cues = [
-    for (final c in jsonDecode(File(args[1]).readAsStringSync()) as List)
-      Cue.fromJson(c as Map<String, dynamic>)
+  // Several recordings of one audiobook: comma-separated cue files.
+  final parts = [
+    for (final f in args[1].split(','))
+      [
+        for (final c in jsonDecode(File(f).readAsStringSync()) as List)
+          Cue.fromJson(c as Map<String, dynamic>)
+      ]
   ];
   final ru = [
     for (final s in const SentenceSplitter().split(pages.expand((p) => p).join('\n'))) s.text
   ];
-  final uk = [for (final t in cuesToSentences(cues)) t.text];
+  final uk = [
+    for (final cues in parts)
+      for (final t in cuesToSentences(cues)) t.text
+  ];
   stdout.writeln('ru ${ru.length} sentences, uk ${uk.length} sentences');
   final sw = Stopwatch()..start();
   final result = alignSentences(ru, uk, skipPenalty: skip, deviationPenalty: dev, band: band,

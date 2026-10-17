@@ -52,15 +52,43 @@ class AudioLinker {
     if (uk.isEmpty) {
       throw CaptionsUnavailable('The subtitles contain no text.');
     }
+    final old = book.audio;
     return _align(
         book,
-        LinkedAudio(
+        LinkedAudio.single(
           videoId: captions.videoId,
           videoTitle: captions.title,
           sentences: uk,
-          anchors: book.audio?.videoId == captions.videoId
-              ? book.audio!.anchors
+          anchors: old != null && old.parts.length == 1 && old.videoId == captions.videoId
+              ? old.anchors
               : const [],
+        ));
+  }
+
+  /// Appends a further recording (the next part of the audiobook) after the
+  /// ones already linked and aligns the whole text again. The sentences and
+  /// sync points of the earlier parts keep their indices.
+  Future<Book> addPart(Book book, VideoCaptions captions) {
+    final audio = book.audio;
+    if (audio == null) return link(book, captions);
+    if (audio.parts.any((p) => p.videoId == captions.videoId)) {
+      throw CaptionsUnavailable('This video is already linked to the book.');
+    }
+    final uk = cuesToSentences(captions.cues);
+    if (uk.isEmpty) {
+      throw CaptionsUnavailable('The subtitles contain no text.');
+    }
+    return _align(
+        book,
+        audio.copyWith(
+          parts: [
+            ...audio.parts,
+            AudioPart(
+                videoId: captions.videoId,
+                title: captions.title,
+                from: audio.sentences.length),
+          ],
+          sentences: [...audio.sentences, ...uk],
         ));
   }
 
