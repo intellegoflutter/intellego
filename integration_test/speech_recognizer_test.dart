@@ -13,9 +13,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   final dir = Directory(Platform.environment['INTELLEGO_ASR_DIR'] ?? '/nonexistent');
 
-  testWidgets('SherpaRecognizer transcribes a Russian reading', (tester) async {
+  testWidgets('GigaAmRecognizer transcribes a Russian reading', (tester) async {
     expect(dir.existsSync(), isTrue, reason: 'set INTELLEGO_ASR_DIR');
-    final recognizer = SherpaRecognizer(dir);
+    final recognizer = GigaAmRecognizer(dir);
     addTearDown(recognizer.dispose);
     final sw = Stopwatch()..start();
     final heard = await recognizer.transcribe(File('${dir.path}/example.wav'));
@@ -40,8 +40,8 @@ void main() {
     expect(cut.problems.map((w) => w.status), everyElement(WordStatus.missed));
   });
 
-  testWidgets('SherpaRecognizer reports a missing model', (tester) async {
-    final recognizer = SherpaRecognizer(Directory('/nonexistent'));
+  testWidgets('GigaAmRecognizer reports a missing model', (tester) async {
+    final recognizer = GigaAmRecognizer(Directory('/nonexistent'));
     addTearDown(recognizer.dispose);
     await expectLater(recognizer.transcribe(File('${dir.path}/example.wav')),
         throwsA(isA<StateError>()));
@@ -59,7 +59,7 @@ void main() {
     final file = await recorder.stop();
     expect(file, isNotNull);
     expect(file!.lengthSync(), greaterThan(44 + 16000));
-    final recognizer = SherpaRecognizer(dir);
+    final recognizer = GigaAmRecognizer(dir);
     addTearDown(recognizer.dispose);
     final heard = await recognizer.transcribe(file); // silence or room noise
     // ignore: avoid_print

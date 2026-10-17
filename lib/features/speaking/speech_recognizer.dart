@@ -1,119 +1,79 @@
-import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
-import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
+import 'package:flutter/foundation.dart';
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
-/// Turns a recording (16-bit mono WAV) into text.
+import 'ctc_decoder.dart';
+import 'gigaam_features.dart';
+import 'wav_reader.dart';
+
+/// Turns a recording (16-bit WAV) into text.
 abstract class SpeechRecognizer {
   Future<String> transcribe(File wav);
 
   Future<void> dispose();
 }
 
-/// Russian GigaAM CTC model run by sherpa-onnx in a worker isolate, so that
-/// loading the model and decoding never block the UI. The model is loaded
-/// once, on the first recording.
-class SherpaRecognizer implements SpeechRecognizer {
-  SherpaRecognizer(this.modelDir);
+/// The Russian GigaAM-v2 CTC model (int8 ONNX export of sherpa-onnx) on the
+/// same ONNX runtime the stress models use. Features are computed in a
+/// background isolate; the model itself is loaded on the first recording.
+class GigaAmRecognizer implements SpeechRecognizer {
+  GigaAmRecognizer(this.modelDir);
 
   /// Directory holding `model.int8.onnx` and `tokens.txt`.
   final Directory modelDir;
 
-  Isolate? _isolate;
-  SendPort? _send;
-  ReceivePort? _receive;
-  Completer<void>? _starting;
-  var _nextId = 0;
-  final _pending = <int, Completer<String>>{};
+  OrtSession? _session;
+  List<String>? _tokens;
+  Future<void>? _loading;
 
-  Future<void> _start() async {
-    if (_send != null) return;
-    if (_starting != null) return _starting!.future;
-    final starting = _starting = Completer<void>();
-    try {
-      final receive = _receive = ReceivePort();
-      final ready = Completer<SendPort>();
-      receive.listen((message) {
-        if (message is SendPort) {
-          ready.complete(message);
-        } else if (message is List && message.length == 3) {
-          final done = _pending.remove(message[0] as int);
-          if (message[2] != null) {
-            done?.completeError(StateError(message[2] as String));
-          } else {
-            done?.complete(message[1] as String);
-          }
+  Future<void> _load() => _loading ??= () async {
+        try {
+          _tokens = parseTokens(await File('${modelDir.path}/tokens.txt').readAsString());
+          _session = await OnnxRuntime().createSession('${modelDir.path}/model.int8.onnx');
+        } catch (e) {
+          _loading = null;
+          throw StateError('Could not load the speech model: $e');
         }
-      });
-      _isolate = await Isolate.spawn(_worker, [receive.sendPort, modelDir.path]);
-      _send = await ready.future;
-      starting.complete();
-    } catch (e) {
-      starting.completeError(e);
-      _starting = null;
-      rethrow;
-    }
-  }
+      }();
 
   @override
   Future<String> transcribe(File wav) async {
-    await _start();
-    final id = _nextId++;
-    final done = _pending[id] = Completer<String>();
-    _send!.send([id, wav.path]);
-    return done.future;
+    await _load();
+    final session = _session!;
+    final tokens = _tokens!;
+
+    final features = await compute(_featuresOf, wav.path);
+    if (features.frames < 4) return '';
+
+    final input = await OrtValue.fromList(features.data, [1, gigaMels, features.frames]);
+    final lengths = await OrtValue.fromList(Int64List.fromList([features.frames]), [1]);
+    Map<String, OrtValue>? outputs;
+    try {
+      outputs = await session.run({'features': input, 'feature_lengths': lengths});
+      final out = outputs['log_probs'] ?? outputs.values.first;
+      final flat = await out.asFlattenedList();
+      final vocab = out.shape.last;
+      final frames = out.shape[out.shape.length - 2];
+      return ctcGreedyDecode([for (final v in flat) (v as num).toDouble()], frames, vocab, tokens);
+    } finally {
+      await input.dispose();
+      await lengths.dispose();
+      for (final o in outputs?.values ?? const <OrtValue>[]) {
+        await o.dispose();
+      }
+    }
   }
 
   @override
   Future<void> dispose() async {
-    _isolate?.kill(priority: Isolate.immediate);
-    _receive?.close();
-    _isolate = null;
-    _send = null;
-    for (final p in _pending.values) {
-      p.completeError(StateError('Recognizer closed'));
-    }
-    _pending.clear();
+    await _session?.close();
+    _session = null;
+    _loading = null;
   }
 }
 
-void _worker(List<Object> init) {
-  final main = init[0] as SendPort;
-  final dir = init[1] as String;
-  final port = ReceivePort();
-  sherpa.initBindings();
-  late final sherpa.OfflineRecognizer recognizer;
-  String? loadError;
-  try {
-    recognizer = sherpa.OfflineRecognizer(sherpa.OfflineRecognizerConfig(
-      model: sherpa.OfflineModelConfig(
-        nemoCtc: sherpa.OfflineNemoEncDecCtcModelConfig(model: '$dir/model.int8.onnx'),
-        tokens: '$dir/tokens.txt',
-        numThreads: 2,
-      ),
-    ));
-  } catch (e) {
-    loadError = 'Could not load the speech model: $e';
-  }
-  main.send(port.sendPort);
-  port.listen((message) {
-    final request = message as List;
-    final id = request[0] as int;
-    if (loadError != null) {
-      main.send([id, '', loadError]);
-      return;
-    }
-    try {
-      final wave = sherpa.readWave(request[1] as String);
-      final stream = recognizer.createStream();
-      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-      recognizer.decode(stream);
-      final text = recognizer.getResult(stream).text;
-      stream.free();
-      main.send([id, text.trim(), null]);
-    } catch (e) {
-      main.send([id, '', 'Recognition failed: $e']);
-    }
-  });
+({Float32List data, int frames}) _featuresOf(String path) {
+  final pcm = readWavFile(File(path));
+  return gigaLogMel(resample(pcm.samples, pcm.sampleRate, gigaSampleRate));
 }

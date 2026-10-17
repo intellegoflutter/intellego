@@ -74,7 +74,7 @@ final speechRecorderProvider = Provider<SpeechRecorder>((ref) {
 
 /// Speech recognizer; the model must have been installed via [AsrModelStore].
 final speechRecognizerProvider = FutureProvider<SpeechRecognizer>((ref) async {
-  final recognizer = SherpaRecognizer(await ref.read(asrModelStoreProvider).dir);
+  final recognizer = GigaAmRecognizer(await ref.read(asrModelStoreProvider).dir);
   ref.onDispose(recognizer.dispose);
   return recognizer;
 });

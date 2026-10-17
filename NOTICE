@@ -11,6 +11,7 @@ Python pipeline.
 Speech recognition for reading aloud uses the GigaAM-v2 Russian CTC model by
 SaluteDevices (https://github.com/salute-developers/GigaAM, MIT License, v2 was
 released under MIT in December 2024), in the int8 ONNX export published by the
-sherpa-onnx project (https://github.com/k2-fsa/sherpa-onnx, Apache License 2.0),
-which also provides the runtime (package sherpa_onnx). The model is downloaded
-at runtime by lib/features/speaking/asr_model_store.dart.
+sherpa-onnx project (https://github.com/k2-fsa/sherpa-onnx, Apache License 2.0).
+The model is downloaded at runtime by lib/features/speaking/asr_model_store.dart;
+the feature extraction in lib/features/speaking/gigaam_features.dart follows
+GigaAM's preprocess.py.

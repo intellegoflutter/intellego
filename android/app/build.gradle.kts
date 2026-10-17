@@ -41,14 +41,6 @@ android {
         }
     }
 
-    // flutter_onnxruntime (onnxruntime-android) and sherpa_onnx each ship
-    // libonnxruntime.so, both 1.28.x: keep one copy.
-    packaging {
-        jniLibs {
-            pickFirsts += "**/libonnxruntime.so"
-        }
-    }
-
     buildTypes {
         release {
             // Local builds without the key fall back to the debug key.
