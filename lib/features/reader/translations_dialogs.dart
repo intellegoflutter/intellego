@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/book.dart';
+import '../translate/language_codes.dart';
 import 'ukrainian_text_tools.dart';
 
 Book? _find(WidgetRef ref, String id) =>
@@ -119,6 +120,17 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
             const Divider(height: 24),
             for (var i = 0; i < book.translations.length; i++)
               _row(book, i),
+            Wrap(spacing: 8, children: [
+              for (final (name, _) in suggestedLanguages)
+                if (!book.translations.any((t) => t.name.toLowerCase() == name.toLowerCase()))
+                  ActionChip(
+                    label: Text('+ $name'),
+                    onPressed: () => _save([
+                      ...book.translations,
+                      Translation(name: name, lines: List.filled(book.sentences.length, '')),
+                    ]),
+                  ),
+            ]),
             Row(children: [
               Expanded(
                 child: TextField(

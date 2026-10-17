@@ -45,6 +45,7 @@ dependencies:
   file_picker: ^13.1.0
   record: ^7.1.2
   scrollable_positioned_list: ^0.3.8
+  google_mlkit_translation: ^0.15.1
 
 dev_dependencies:
   flutter_test:

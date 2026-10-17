@@ -20,6 +20,7 @@ import '../features/speaking/feedback_writer.dart';
 import '../features/speaking/recorder.dart';
 import '../features/speaking/speaking_log.dart';
 import '../features/speaking/speech_recognizer.dart';
+import '../features/translate/sentence_translator.dart';
 import '../features/youtube/youtube_captions.dart';
 
 final bookRepositoryProvider = FutureProvider<BookRepository>((ref) async {
@@ -62,6 +63,12 @@ final segmentPlayerProvider = Provider<SegmentPlayer>((ref) {
   final player = createSegmentPlayer();
   ref.onDispose(player.dispose);
   return player;
+});
+
+final sentenceTranslatorProvider = Provider<SentenceTranslator>((ref) {
+  final translator = createSentenceTranslator();
+  ref.onDispose(translator.dispose);
+  return translator;
 });
 
 final asrModelStoreProvider = Provider<AsrModelStore>((ref) => AsrModelStore());

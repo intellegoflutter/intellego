@@ -13,6 +13,8 @@ import '../library/add_pages_dialog.dart';
 import '../library/link_audio_screen.dart';
 import '../playback/audio_downloader.dart';
 import '../speaking/asr_model_store.dart';
+import '../translate/language_codes.dart';
+import '../translate/sentence_translator.dart';
 import '../speaking/pronunciation_comparer.dart';
 import '../speaking/recorder.dart';
 import '../speaking/speaking_log.dart';
@@ -40,6 +42,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
   int? _recordingIndex;
   int? _lastRecorded;
   bool _transcribing = false;
+  final _translating = ValueNotifier<bool>(false);
 
   final _positions = ItemPositionsListener.create();
   int? _startIndex;
@@ -143,6 +146,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
       await log.record(i, comparison.score);
       if (!mounted) return;
       setState(() => _transcribing = false);
+      unawaited(_fillTranslations(book.id, i));
       await _showResult(book.id, i, file, heard, comparison, feedback);
     } catch (e) {
       _toast('$e');
@@ -166,11 +170,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
                 ?.sentences[i]
                 .practiced ??
             false;
-        return SpeakingSheet(
+        final live = ref.watch(booksProvider).value?.where((b) => b.id == bookId).firstOrNull;
+        final lines = [
+          for (final t in live?.translations ?? const <Translation>[])
+            if (t.visible && i < t.lines.length && t.lines[i].isNotEmpty) (t.name, t.lines[i])
+        ];
+        return ValueListenableBuilder<bool>(
+          valueListenable: _translating,
+          builder: (context, busy, _) => SpeakingSheet(
           comparison: comparison,
           heard: heard,
           feedback: feedback,
           practiced: practiced,
+          translations: lines,
+          translating: busy,
+          onAddLanguages: (live?.translations.isEmpty ?? false) &&
+                  ref.read(sentenceTranslatorProvider).supported
+              ? () => _addDefaultLanguages(bookId, i)
+              : null,
           onPlayRecording: () => ref
               .read(segmentPlayerProvider)
               .playSegment(recording.path, 0, 3600000),
@@ -180,7 +197,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
                 ref.read(booksProvider).value?.where((b) => b.id == bookId).firstOrNull;
             if (book != null) _toggle(book, i);
           },
-        );
+        ));
       }),
     );
     await ref.read(segmentPlayerProvider).pause();
@@ -241,6 +258,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     WidgetsBinding.instance.removeObserver(this);
     _positions.itemPositions.removeListener(_onScrolled);
     _saveTimer?.cancel();
+    _translating.dispose();
     if (_startIndex != null) ReadingPosition.save(widget.bookId, _topIndex);
     if (_recordingIndex != null) unawaited(_recorder?.stop());
     super.dispose();
@@ -252,6 +270,74 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     } catch (_) {
       return null;
     }
+  }
+
+  // --- translations ------------------------------------------------------
+
+  Book? _latest(String bookId) =>
+      ref.read(booksProvider).value?.where((b) => b.id == bookId).firstOrNull;
+
+  /// Translates the empty lines of sentence [i] with the phone's offline
+  /// translator ([only]: just that language) and saves them in the book.
+  Future<void> _fillTranslations(String bookId, int i, {String? only, bool announce = false}) async {
+    final translator = ref.read(sentenceTranslatorProvider);
+    final book = _latest(bookId);
+    if (book == null) return;
+    if (!translator.supported) {
+      if (announce) _toast('Offline translation is available on the phone only.');
+      return;
+    }
+    if (book.translations.isEmpty) {
+      if (announce) _toast('Add a language first (menu ⋮ → Languages).');
+      return;
+    }
+    _translating.value = true;
+    try {
+      for (final t in book.translations) {
+        final code = languageCodeFor(t.name);
+        if ((only == null || only == t.name) && code != null && !await translator.isReady(code)) {
+          _toast('Downloading the ${t.name} translation model (about 30 MB, once)…');
+          break;
+        }
+      }
+      final lines = await missingTranslations(book, i, translator, only: only);
+      if (lines.isEmpty && announce) {
+        _toast('Nothing to translate: the languages have no known code or are filled.');
+      }
+      final fresh = _latest(bookId);
+      if (fresh != null) {
+        await ref.read(booksProvider.notifier).updateBook(withTranslatedLines(fresh, i, lines));
+      }
+    } catch (e) {
+      _toast('Translation failed: $e');
+    } finally {
+      _translating.value = false;
+    }
+  }
+
+  /// A tap on an empty language line: translate it, or edit when that is
+  /// not possible.
+  Future<void> _fillOrEdit(Book book, int i, String language) async {
+    final canTranslate =
+        ref.read(sentenceTranslatorProvider).supported && languageCodeFor(language) != null;
+    if (canTranslate) {
+      await _fillTranslations(book.id, i, only: language, announce: true);
+    } else {
+      await editSentenceTranslations(context, ref, book.id, i);
+    }
+  }
+
+  Future<void> _addDefaultLanguages(String bookId, int i) async {
+    final book = _latest(bookId);
+    if (book == null) return;
+    final have = {for (final t in book.translations) t.name.toLowerCase()};
+    await ref.read(booksProvider.notifier).updateBook(book.withTranslations([
+          ...book.translations,
+          for (final (name, _) in suggestedLanguages.take(2))
+            if (!have.contains(name.toLowerCase()))
+              Translation(name: name, lines: List.filled(book.sentences.length, '')),
+        ]));
+    await _fillTranslations(bookId, i);
   }
 
   Future<void> _downloadAudio(String id) async {
@@ -559,6 +645,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
           onEdit: () => _editUkrainian(book, i),
           onSync: () => _syncHere(book, i),
           onTranslate: () => editSentenceTranslations(context, ref, book.id, i),
+          onFillLanguage: (name) => _fillOrEdit(book, i, name),
+          onTranslateAll: () => _fillTranslations(book.id, i, announce: true),
         ),
       );
   }
@@ -585,6 +673,8 @@ class _SentenceTile extends StatelessWidget {
     required this.onEdit,
     required this.onSync,
     required this.onTranslate,
+    required this.onFillLanguage,
+    required this.onTranslateAll,
   });
 
   final int index;
@@ -592,7 +682,8 @@ class _SentenceTile extends StatelessWidget {
   final bool showUkrainian;
   final bool playing, recording, transcribing;
   final SpeakingAttempt? best;
-  final VoidCallback onRecord, onPlay, onToggle, onEdit, onSync, onTranslate;
+  final VoidCallback onRecord, onPlay, onToggle, onEdit, onSync, onTranslate, onTranslateAll;
+  final void Function(String language) onFillLanguage;
 
   @override
   Widget build(BuildContext context) {
@@ -643,7 +734,8 @@ class _SentenceTile extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 6),
                           child: t.lines[index].isEmpty
                               ? InkWell(
-                                  onTap: onTranslate,
+                                  onTap: () => onFillLanguage(t.name),
+                                  onLongPress: onTranslate,
                                   child: Text('+ ${t.name}',
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(color: theme.colorScheme.outline)),
@@ -686,9 +778,13 @@ class _SentenceTile extends StatelessWidget {
                   if (v == 'edit') onEdit();
                   if (v == 'sync') onSync();
                   if (v == 'translate') onTranslate();
+                  if (v == 'translateAll') onTranslateAll();
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(value: 'translate', child: Text('Edit languages…')),
+                  if (book.translations.isNotEmpty)
+                    const PopupMenuItem(
+                        value: 'translateAll', child: Text('Translate with the phone (offline)')),
                   if (book.audio != null && s.hasAudio)
                     const PopupMenuItem(value: 'edit', child: Text('Edit Ukrainian')),
                   if (book.audio != null)

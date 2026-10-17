@@ -14,6 +14,9 @@ class SpeakingSheet extends StatelessWidget {
     required this.onRetry,
     required this.onMarkPracticed,
     required this.practiced,
+    required this.translations,
+    required this.translating,
+    this.onAddLanguages,
   });
 
   final Comparison comparison;
@@ -21,6 +24,13 @@ class SpeakingSheet extends StatelessWidget {
   final String feedback;
   final VoidCallback onPlayRecording, onRetry, onMarkPracticed;
   final bool practiced;
+
+  /// `(language, text)` of the sentence in the book's languages.
+  final List<(String, String)> translations;
+  final bool translating;
+
+  /// Offered when the book has no language to translate into.
+  final VoidCallback? onAddLanguages;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +86,31 @@ class SpeakingSheet extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
           const SizedBox(height: 12),
           Text(feedback, style: theme.textTheme.bodyMedium),
+          if (translations.isNotEmpty || translating || onAddLanguages != null) ...[
+            const Divider(height: 28),
+            for (final (name, text) in translations)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(
+                      text: '$name: ',
+                      style: TextStyle(
+                          color: theme.colorScheme.outline, fontWeight: FontWeight.w600)),
+                  TextSpan(text: text),
+                ]), style: theme.textTheme.bodyLarge),
+              ),
+            if (translating)
+              Row(children: [
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(width: 8),
+                Text('Translating…', style: theme.textTheme.bodySmall),
+              ]),
+            if (onAddLanguages != null)
+              TextButton.icon(
+                  onPressed: onAddLanguages,
+                  icon: const Icon(Icons.translate),
+                  label: const Text('Add English and Italian translations')),
+          ],
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.icon(
