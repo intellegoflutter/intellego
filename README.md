@@ -18,12 +18,12 @@ Targets: Android and Linux desktop.
 ```bash
 flutter pub get
 
-# Stress / ё dictionaries are generated, not committed (RUAccent, MIT):
-mkdir -p /tmp/ruaccent && cd /tmp/ruaccent
-for f in accents yo_words omographs yo_homographs; do
-  curl -sLO "https://huggingface.co/ruaccent/accentuator/resolve/main/dictionary/$f.json.gz"
-done
-cd - && python3 -I tool/build_dictionaries.py /tmp/ruaccent assets/dict
+# The stress / ё dictionaries in assets/dict are committed. To rebuild them
+# from the RUAccent sources (MIT):
+#   mkdir -p /tmp/ruaccent && cd /tmp/ruaccent
+#   for f in accents yo_words omographs yo_homographs; do
+#     curl -sLO "https://huggingface.co/ruaccent/accentuator/resolve/main/dictionary/$f.json.gz"; done
+#   cd - && python3 -I tool/build_dictionaries.py /tmp/ruaccent assets/dict
 
 flutter run -d linux
 ```

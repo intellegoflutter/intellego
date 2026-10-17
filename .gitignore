@@ -47,9 +47,6 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# Generated dictionaries (see tool/build_dictionaries.py)
-/assets/dict/*
-!/assets/dict/README.md
 
 # Local model cache for tests
 /.model_cache/
