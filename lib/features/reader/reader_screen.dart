@@ -41,6 +41,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
   int _playingPart = 0;
   int? _recordingIndex;
   int? _lastRecorded;
+  int? _speakingIndex;
   bool _transcribing = false;
   final _translating = ValueNotifier<bool>(false);
 
@@ -84,9 +85,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
       _toast('Add the audio file first (banner at the top).');
       return;
     }
+    await ref.read(russianSpeakerProvider).stop();
     setState(() {
       _playing = i;
       _playingPart = seg.part;
+      _speakingIndex = null;
     });
     try {
       await ref.read(segmentPlayerProvider).playSegment(file.path, seg.startMs, seg.endMs);
@@ -115,6 +118,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     }
     try {
       await ref.read(segmentPlayerProvider).pause();
+      await ref.read(russianSpeakerProvider).stop();
       await recorder.start();
       if (mounted) setState(() => _recordingIndex = i);
     } catch (e) {
@@ -270,6 +274,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
       return ref.read(speechRecorderProvider);
     } catch (_) {
       return null;
+    }
+  }
+
+  // --- Russian voice -----------------------------------------------------
+
+  Future<void> _speak(Book book, int i) async {
+    final speaker = ref.read(russianSpeakerProvider);
+    if (_speakingIndex == i) {
+      await speaker.stop();
+      if (mounted) setState(() => _speakingIndex = null);
+      return;
+    }
+    await ref.read(segmentPlayerProvider).pause();
+    if (mounted) setState(() => _speakingIndex = i);
+    try {
+      await speaker.speak(book.sentences[i].text);
+    } catch (e) {
+      _toast('$e');
+    } finally {
+      if (mounted && _speakingIndex == i) setState(() => _speakingIndex = null);
     }
   }
 
@@ -637,6 +661,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
           book: book,
           showUkrainian: _showUkrainian,
           playing: _playing == i,
+          speaking: _speakingIndex == i,
+          onSpeak: () => _speak(book, i),
           recording: _recordingIndex == i,
           transcribing: _transcribing && _recordingIndex == null && _lastRecorded == i,
           best: attempts?.attempts[i],
@@ -665,6 +691,8 @@ class _SentenceTile extends StatelessWidget {
     required this.book,
     required this.showUkrainian,
     required this.playing,
+    required this.speaking,
+    required this.onSpeak,
     required this.recording,
     required this.transcribing,
     required this.best,
@@ -681,9 +709,9 @@ class _SentenceTile extends StatelessWidget {
   final int index;
   final Book book;
   final bool showUkrainian;
-  final bool playing, recording, transcribing;
+  final bool playing, speaking, recording, transcribing;
   final SpeakingAttempt? best;
-  final VoidCallback onRecord, onPlay, onToggle, onEdit, onSync, onTranslate, onTranslateAll;
+  final VoidCallback onSpeak, onRecord, onPlay, onToggle, onEdit, onSync, onTranslate, onTranslateAll;
   final void Function(String language) onFillLanguage;
 
   @override
@@ -709,8 +737,23 @@ class _SentenceTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s.accented,
-                        style: theme.textTheme.titleLarge?.copyWith(height: 1.4)),
+                    Text.rich(
+                      TextSpan(children: [
+                        TextSpan(text: s.accented),
+                        const TextSpan(text: ' '),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: _InlineButton(
+                            tooltip: speaking ? 'Stop' : 'Hear it in Russian (synthetic voice)',
+                            icon: speaking ? Icons.stop : Icons.volume_up,
+                            background: theme.colorScheme.tertiaryContainer,
+                            foreground: theme.colorScheme.onTertiaryContainer,
+                            onTap: onSpeak,
+                          ),
+                        ),
+                      ]),
+                      style: theme.textTheme.titleLarge?.copyWith(height: 1.4),
+                    ),
                     if (best != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
@@ -719,15 +762,39 @@ class _SentenceTile extends StatelessWidget {
                             style: theme.textTheme.labelSmall
                                 ?.copyWith(color: theme.colorScheme.outline)),
                       ),
-                    if (showUkrainian && uk != null)
+                    if (s.hasAudio && (showUkrainian && uk != null || !showUkrainian))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text.rich(
+                          TextSpan(children: [
+                            if (showUkrainian && uk != null)
+                              TextSpan(
+                                  text: '$uk ',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: weak
+                                          ? theme.colorScheme.outline
+                                          : theme.colorScheme.secondary,
+                                      fontStyle: weak ? FontStyle.italic : null)),
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: _InlineButton(
+                                tooltip: 'Play the audiobook',
+                                icon: playing ? Icons.graphic_eq : Icons.play_arrow,
+                                background: Colors.transparent,
+                                foreground: theme.colorScheme.primary,
+                                outlined: true,
+                                onTap: onPlay,
+                              ),
+                            ),
+                          ]),
+                        ),
+                      )
+                    else if (showUkrainian && uk != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(uk,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                                color: weak
-                                    ? theme.colorScheme.outline
-                                    : theme.colorScheme.secondary,
-                                fontStyle: weak ? FontStyle.italic : null)),
+                                color: theme.colorScheme.secondary)),
                       ),
                     for (final t in book.translations)
                       if (t.visible)
@@ -756,12 +823,6 @@ class _SentenceTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (s.hasAudio)
-                IconButton(
-                  tooltip: 'Play',
-                  icon: Icon(playing ? Icons.volume_up : Icons.play_circle_outline),
-                  onPressed: onPlay,
-                ),
               if (transcribing)
                 const Padding(
                   padding: EdgeInsets.all(12),
@@ -802,4 +863,38 @@ class _SentenceTile extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// A small round button that sits inside a line of text.
+class _InlineButton extends StatelessWidget {
+  const _InlineButton({
+    required this.tooltip,
+    required this.icon,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+    this.outlined = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final Color background, foreground;
+  final bool outlined;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: Material(
+          color: background,
+          shape: CircleBorder(
+              side: outlined ? BorderSide(color: foreground, width: 1.5) : BorderSide.none),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(width: 32, height: 32, child: Icon(icon, size: 20, color: foreground)),
+          ),
+        ),
+      );
 }

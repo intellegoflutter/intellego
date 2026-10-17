@@ -18,6 +18,7 @@ import '../features/playback/segment_player.dart';
 import '../features/speaking/asr_model_store.dart';
 import '../features/speaking/feedback_writer.dart';
 import '../features/speaking/recorder.dart';
+import '../features/speaking/russian_speaker.dart';
 import '../features/speaking/speaking_log.dart';
 import '../features/speaking/speech_recognizer.dart';
 import '../features/translate/sentence_translator.dart';
@@ -69,6 +70,12 @@ final sentenceTranslatorProvider = Provider<SentenceTranslator>((ref) {
   final translator = createSentenceTranslator();
   ref.onDispose(translator.dispose);
   return translator;
+});
+
+final russianSpeakerProvider = Provider<RussianSpeaker>((ref) {
+  final speaker = createRussianSpeaker();
+  ref.onDispose(speaker.dispose);
+  return speaker;
 });
 
 final asrModelStoreProvider = Provider<AsrModelStore>((ref) => AsrModelStore());
