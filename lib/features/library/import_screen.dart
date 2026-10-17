@@ -155,6 +155,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               controller: _url,
               enabled: !_busy,
               keyboardType: TextInputType.url,
+              textCapitalization: TextCapitalization.none,
+              autocorrect: false,
+              enableSuggestions: false,
               decoration: const InputDecoration(
                 labelText: 'Book URL or id',
                 helperText: 'Paste a loveread link; the site is remembered. '

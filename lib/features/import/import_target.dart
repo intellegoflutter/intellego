@@ -28,7 +28,7 @@ ImportTarget? parseImportInput(String input, {required Uri site}) {
   if (text.isEmpty) return null;
   final id = int.tryParse(text);
   if (id != null) return LoveReadTarget(site, id, 1);
-  final uri = Uri.tryParse(text);
+  final uri = Uri.tryParse(_withScheme(text, site));
   if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
   final bookId = LoveReadSource.bookId(uri);
   if (bookId != null) {
@@ -36,6 +36,18 @@ ImportTarget? parseImportInput(String input, {required Uri site}) {
         LoveReadSource.siteOf(uri), bookId, LoveReadSource.startPage(uri));
   }
   return WebPageTarget(uri);
+}
+
+/// Completes what was typed: a missing `https://` is added, and an address
+/// that starts at the path (`read_book.php?id=5`) gets the remembered [site].
+String _withScheme(String text, Uri site) {
+  if (RegExp(r'^[a-z][a-z0-9+.-]*://', caseSensitive: false).hasMatch(text)) {
+    return text;
+  }
+  if (text.startsWith('/')) return '$site$text';
+  if (text.startsWith('read_book.php')) return '$site/$text';
+  if (text.contains('.') && !text.contains(' ')) return 'https://$text';
+  return text;
 }
 
 /// What the input field starts with so only the id has to be typed.

@@ -54,6 +54,12 @@ void main() {
         site: Uri.parse('https://other.example')) as LoveReadTarget;
     expect((u.bookId, u.firstPage, u.site.host), (5, 4, 'loveread.ec'));
     expect(parseImportInput('https://example.com/a', site: site), isA<WebPageTarget>());
+    final bare = parseImportInput('Loveread.ec/read_book.php?id=7&p=2', site: Uri.parse('https://other.example'))
+        as LoveReadTarget;
+    expect((bare.bookId, bare.firstPage, bare.site.host), (7, 2, 'loveread.ec'));
+    final path = parseImportInput('read_book.php?id=9', site: site) as LoveReadTarget;
+    expect((path.bookId, path.site.host), (9, 'loveread.ec'));
+    expect(parseImportInput('/read_book.php?id=9', site: site), isA<LoveReadTarget>());
     expect(parseImportInput('  ', site: site), isNull);
     expect(parseImportInput('not a url', site: site), isNull);
     expect(inputPrefix(site), 'https://loveread.ec/read_book.php?id=');
