@@ -38,6 +38,11 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
   }
 
   Future<void> _link(Book book) async {
+    if (_url.text.trim().isEmpty) {
+      setState(() => _error = 'Paste the YouTube link first. Its subtitles give '
+          'the Ukrainian text and the timing; the audio file alone is not enough.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -84,7 +89,7 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
             enabled: !_busy,
             keyboardType: TextInputType.url,
             decoration: const InputDecoration(
-              labelText: 'YouTube link',
+              labelText: 'YouTube link (required)',
               helperText: 'The subtitles (auto-generated are fine) give the '
                   'Ukrainian text and the timing of every sentence.',
               border: OutlineInputBorder(),
