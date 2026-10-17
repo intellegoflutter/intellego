@@ -4,6 +4,9 @@ import '../nlp/sentences/sentence_splitter.dart';
 import 'loveread_source.dart';
 import 'web_text_fetcher.dart';
 
+/// Reports how many sentences have been processed (split and accented).
+typedef ProcessProgress = void Function(int done, int total);
+
 class ImportService {
   ImportService({
     required this._fetcher,
@@ -21,6 +24,7 @@ class ImportService {
     Accentuator? accentuator,
     bool stress = true,
     bool yo = true,
+    ProcessProgress? onProcessProgress,
   }) async {
     final page = await _fetcher.fetch(url);
     return _build(
@@ -30,6 +34,7 @@ class ImportService {
       accentuator: accentuator,
       stress: stress,
       yo: yo,
+      onProcessProgress: onProcessProgress,
     );
   }
 
@@ -44,6 +49,7 @@ class ImportService {
     bool stress = true,
     bool yo = true,
     void Function(int done, int total)? onFetchProgress,
+    ProcessProgress? onProcessProgress,
   }) async {
     final book = await _loveRead.fetchBook(site, bookId,
         firstPage: firstPage, pageCount: pageCount, onProgress: onFetchProgress);
@@ -54,6 +60,7 @@ class ImportService {
       accentuator: accentuator,
       stress: stress,
       yo: yo,
+      onProcessProgress: onProcessProgress,
     );
     return built.appended(const [], nextPage: book.nextPage);
   }
@@ -68,6 +75,7 @@ class ImportService {
     bool stress = true,
     bool yo = true,
     void Function(int done, int total)? onFetchProgress,
+    ProcessProgress? onProcessProgress,
   }) async {
     final url = Uri.tryParse(book.sourceUrl ?? '');
     final id = url == null ? null : LoveReadSource.bookId(url);
@@ -83,14 +91,21 @@ class ImportService {
         firstPage: next, pageCount: pageCount, onProgress: onFetchProgress);
     if (more.paragraphs.isEmpty) throw FetchException('No more pages to add.');
     final offset = book.sentences.isEmpty ? 0 : book.sentences.last.paragraph + 1;
-    final added = await _sentences(more.paragraphs, accentuator, stress, yo, offset);
+    final added = await _sentences(more.paragraphs, accentuator, stress, yo, offset, onProcessProgress);
     return book.appended(added, nextPage: more.nextPage);
   }
 
   Future<List<BookSentence>> _sentences(List<String> paragraphs,
-      Accentuator? accentuator, bool stress, bool yo, int paragraphOffset) async {
+      Accentuator? accentuator, bool stress, bool yo, int paragraphOffset,
+      ProcessProgress? onProgress) async {
     final out = <BookSentence>[];
-    for (final s in _splitter.split(paragraphs.join('\n'))) {
+    final split = _splitter.split(paragraphs.join('\n'));
+    for (final s in split) {
+      if (onProgress != null && out.length % 20 == 0) {
+        onProgress(out.length, split.length);
+        // Let the UI repaint between batches.
+        await Future<void>.delayed(Duration.zero);
+      }
       final accented = accentuator == null
           ? s.text
           : await accentuator.accent(s.text, stress: stress, yo: yo);
@@ -109,8 +124,10 @@ class ImportService {
     required Accentuator? accentuator,
     required bool stress,
     required bool yo,
+    ProcessProgress? onProcessProgress,
   }) async {
-    final sentences = await _sentences(paragraphs, accentuator, stress, yo, 0);
+    final sentences =
+        await _sentences(paragraphs, accentuator, stress, yo, 0, onProcessProgress);
     final now = DateTime.now();
     return Book(
       id: now.microsecondsSinceEpoch.toString(),

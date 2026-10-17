@@ -67,7 +67,15 @@ class _AddPagesDialogState extends ConsumerState<AddPagesDialog> {
               _status = 'Downloading page $done of $total…';
               _progress = done / total;
             }),
+            onProcessProgress: (done, total) => setState(() {
+              _status = 'Adding stress marks… sentence $done of $total';
+              _progress = done / total;
+            }),
           );
+      setState(() {
+        _status = 'Saving…';
+        _progress = null;
+      });
       await ref.read(booksProvider.notifier).updateBook(updated);
       if (updated.audio != null) {
         setState(() {

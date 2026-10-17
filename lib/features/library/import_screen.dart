@@ -54,6 +54,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     }
   }
 
+  void _onProcess(int done, int total) => setState(() {
+        _status = _accent
+            ? 'Adding stress marks… sentence $done of $total'
+            : 'Splitting into sentences… $done of $total';
+        _progress = done / total;
+      });
+
   @override
   void dispose() {
     _url.dispose();
@@ -99,7 +106,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           accentuator = await ref.read(accentuatorProvider.future);
         }
       }
-      setState(() => _status = 'Processing text…');
+      setState(() {
+        _status = 'Processing text…';
+        _progress = null;
+      });
       final service = ref.read(importServiceProvider);
       final book = switch (target) {
         LoveReadTarget t => await service.importLoveRead(
@@ -112,13 +122,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               _status = 'Downloading page $done of $total…';
               _progress = done / total;
             }),
+            onProcessProgress: _onProcess,
           ),
-        WebPageTarget t =>
-          await service.importUrl(t.url, accentuator: accentuator),
+        WebPageTarget t => await service.importUrl(t.url,
+            accentuator: accentuator, onProcessProgress: _onProcess),
       };
-      _progress = null;
+      setState(() {
+        _status = 'Saving…';
+        _progress = null;
+      });
       await ref.read(booksProvider.notifier).add(book);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        Navigator.of(context).pop();
+        messenger.showSnackBar(SnackBar(
+            content: Text('Imported “${book.title}”: ${book.sentences.length} sentences.')));
+      }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
