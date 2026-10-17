@@ -5,13 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../app/providers.dart';
 import '../../data/book.dart';
 import '../library/add_pages_dialog.dart';
 import '../library/link_audio_screen.dart';
 import '../playback/audio_downloader.dart';
+import '../speaking/asr_model_store.dart';
+import '../speaking/pronunciation_comparer.dart';
+import '../speaking/recorder.dart';
+import '../speaking/speaking_log.dart';
+import '../speaking/speaking_sheet.dart';
 import '../youtube/caption_models.dart';
+import 'reading_position.dart';
 import 'translations_dialogs.dart';
 import 'ukrainian_text_tools.dart';
 
@@ -24,12 +31,47 @@ class ReaderScreen extends ConsumerStatefulWidget {
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends ConsumerState<ReaderScreen> {
+class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBindingObserver {
   bool _showUkrainian = true;
   int? _playing;
   bool _busy = false;
   double? _downloadProgress;
   int _playingPart = 0;
+  int? _recordingIndex;
+  int? _lastRecorded;
+  bool _transcribing = false;
+
+  final _positions = ItemPositionsListener.create();
+  int? _startIndex;
+  int _topIndex = 0;
+  Timer? _saveTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _positions.itemPositions.addListener(_onScrolled);
+    ReadingPosition.load(widget.bookId).then((i) {
+      if (mounted) setState(() => _startIndex = i);
+    });
+  }
+
+  void _onScrolled() {
+    _topIndex = topVisibleIndex(
+        [for (final p in _positions.itemPositions.value) (p.index, p.itemTrailingEdge)]);
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 600),
+        () => ReadingPosition.save(widget.bookId, _topIndex));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Save at once when the app goes to the background: it may be killed there.
+    if (state != AppLifecycleState.resumed && _startIndex != null) {
+      _saveTimer?.cancel();
+      ReadingPosition.save(widget.bookId, _topIndex);
+    }
+  }
 
   Future<void> _play(Book book, int i) async {
     final seg = book.audioSegmentFor(i);
@@ -47,6 +89,168 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       await ref.read(segmentPlayerProvider).playSegment(file.path, seg.startMs, seg.endMs);
     } catch (e) {
       _toast('Playback failed: $e');
+    }
+  }
+
+  // --- reading aloud ---------------------------------------------------
+
+  Future<void> _record(Book book, int i) async {
+    if (_transcribing) return;
+    final recorder = ref.read(speechRecorderProvider);
+    if (_recordingIndex == i) {
+      await _finishRecording(book, i);
+      return;
+    }
+    if (_recordingIndex != null) return;
+    final store = ref.read(asrModelStoreProvider);
+    if (!await store.isInstalled()) {
+      if (!await _downloadSpeechModel(store)) return;
+    }
+    if (!await recorder.ensurePermission()) {
+      _toast('Allow the microphone for Intellego to read aloud.');
+      return;
+    }
+    try {
+      await ref.read(segmentPlayerProvider).pause();
+      await recorder.start();
+      if (mounted) setState(() => _recordingIndex = i);
+    } catch (e) {
+      _toast('Could not start recording: $e');
+    }
+  }
+
+  Future<void> _finishRecording(Book book, int i) async {
+    final recorder = ref.read(speechRecorderProvider);
+    setState(() {
+      _lastRecorded = _recordingIndex;
+      _recordingIndex = null;
+      _transcribing = true;
+    });
+    try {
+      final file = await recorder.stop();
+      if (file == null) {
+        _toast('Nothing was recorded.');
+        return;
+      }
+      final recognizer = await ref.read(speechRecognizerProvider.future);
+      final heard = await recognizer.transcribe(file);
+      final sentence = book.sentences[i];
+      final comparison = compareWords(accented: sentence.accented, heard: heard);
+      final feedback = await ref
+          .read(feedbackWriterProvider)
+          .write(accented: sentence.accented, comparison: comparison);
+      final log = await ref.read(speakingLogProvider(book.id).future);
+      await log.record(i, comparison.score);
+      if (!mounted) return;
+      setState(() => _transcribing = false);
+      await _showResult(book.id, i, file, heard, comparison, feedback);
+    } catch (e) {
+      _toast('$e');
+    } finally {
+      if (mounted) setState(() => _transcribing = false);
+    }
+  }
+
+  Future<void> _showResult(String bookId, int i, File recording, String heard,
+      Comparison comparison, String feedback) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Consumer(builder: (context, ref, _) {
+        final practiced = ref
+                .watch(booksProvider)
+                .value
+                ?.where((b) => b.id == bookId)
+                .firstOrNull
+                ?.sentences[i]
+                .practiced ??
+            false;
+        return SpeakingSheet(
+          comparison: comparison,
+          heard: heard,
+          feedback: feedback,
+          practiced: practiced,
+          onPlayRecording: () => ref
+              .read(segmentPlayerProvider)
+              .playSegment(recording.path, 0, 3600000),
+          onRetry: () => Navigator.pop(sheetContext, 'retry'),
+          onMarkPracticed: () {
+            final book =
+                ref.read(booksProvider).value?.where((b) => b.id == bookId).firstOrNull;
+            if (book != null) _toggle(book, i);
+          },
+        );
+      }),
+    );
+    await ref.read(segmentPlayerProvider).pause();
+    if (action == 'retry' && mounted) {
+      final book = ref.read(booksProvider).value?.where((b) => b.id == bookId).firstOrNull;
+      if (book != null) await _record(book, i);
+    }
+  }
+
+  /// Asks before the one-time model download and shows its progress.
+  Future<bool> _downloadSpeechModel(AsrModelStore store) async {
+    final mb = (AsrModelStore.totalBytes / 1e6).round();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Speech recognition model'),
+        content: Text('To check your reading Intellego needs a Russian speech '
+            'model of about $mb MB. It is downloaded once and then works '
+            'offline. Use Wi-Fi.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Download')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return false;
+    final progress = ValueNotifier<double>(0);
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Downloading speech model…'),
+        content: ValueListenableBuilder<double>(
+          valueListenable: progress,
+          builder: (context, v, _) => Column(mainAxisSize: MainAxisSize.min, children: [
+            LinearProgressIndicator(value: v),
+            const SizedBox(height: 8),
+            Text('${(v * mb).round()} of $mb MB'),
+          ]),
+        ),
+      ),
+    ));
+    var installed = false;
+    try {
+      await store.install(onProgress: (p) => progress.value = p);
+      installed = true;
+    } catch (e) {
+      _toast('Download failed: $e');
+    } finally {
+      if (mounted) Navigator.of(context).pop();
+      progress.dispose();
+    }
+    return installed;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _positions.itemPositions.removeListener(_onScrolled);
+    _saveTimer?.cancel();
+    if (_startIndex != null) ReadingPosition.save(widget.bookId, _topIndex);
+    if (_recordingIndex != null) unawaited(_recorder?.stop());
+    super.dispose();
+  }
+
+  SpeechRecorder? get _recorder {
+    try {
+      return ref.read(speechRecorderProvider);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -333,7 +537,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Widget _list(Book book) {
-    return ListView.separated(
+    final attempts = ref.watch(speakingLogProvider(book.id)).value;
+    final start = _startIndex;
+    if (start == null) return const SizedBox.shrink();
+    return ScrollablePositionedList.separated(
+        itemPositionsListener: _positions,
+        initialScrollIndex: start.clamp(0, book.sentences.isEmpty ? 0 : book.sentences.length - 1),
         itemCount: book.sentences.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) => _SentenceTile(
@@ -341,6 +550,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           book: book,
           showUkrainian: _showUkrainian,
           playing: _playing == i,
+          recording: _recordingIndex == i,
+          transcribing: _transcribing && _recordingIndex == null && _lastRecorded == i,
+          best: attempts?.attempts[i],
+          onRecord: () => _record(book, i),
           onPlay: () => _play(book, i),
           onToggle: () => _toggle(book, i),
           onEdit: () => _editUkrainian(book, i),
@@ -363,6 +576,10 @@ class _SentenceTile extends StatelessWidget {
     required this.book,
     required this.showUkrainian,
     required this.playing,
+    required this.recording,
+    required this.transcribing,
+    required this.best,
+    required this.onRecord,
     required this.onPlay,
     required this.onToggle,
     required this.onEdit,
@@ -373,8 +590,9 @@ class _SentenceTile extends StatelessWidget {
   final int index;
   final Book book;
   final bool showUkrainian;
-  final bool playing;
-  final VoidCallback onPlay, onToggle, onEdit, onSync, onTranslate;
+  final bool playing, recording, transcribing;
+  final SpeakingAttempt? best;
+  final VoidCallback onRecord, onPlay, onToggle, onEdit, onSync, onTranslate;
 
   @override
   Widget build(BuildContext context) {
@@ -401,6 +619,14 @@ class _SentenceTile extends StatelessWidget {
                   children: [
                     Text(s.accented,
                         style: theme.textTheme.titleLarge?.copyWith(height: 1.4)),
+                    if (best != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                            'Read aloud ${best!.attempts}×, best ${(best!.best * 100).round()}%',
+                            style: theme.textTheme.labelSmall
+                                ?.copyWith(color: theme.colorScheme.outline)),
+                      ),
                     if (showUkrainian && uk != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -442,6 +668,18 @@ class _SentenceTile extends StatelessWidget {
                   tooltip: 'Play',
                   icon: Icon(playing ? Icons.volume_up : Icons.play_circle_outline),
                   onPressed: onPlay,
+                ),
+              if (transcribing)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              else
+                IconButton(
+                  tooltip: recording ? 'Stop and check' : 'Read aloud',
+                  icon: Icon(recording ? Icons.stop_circle : Icons.mic_none,
+                      color: recording ? theme.colorScheme.error : null),
+                  onPressed: onRecord,
                 ),
               PopupMenuButton<String>(
                 onSelected: (v) {

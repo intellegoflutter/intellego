@@ -15,6 +15,11 @@ import '../features/nlp/accent/onnx/onnx_accentuator_loader.dart';
 import '../features/playback/audio_downloader.dart';
 import '../features/playback/audio_store.dart';
 import '../features/playback/segment_player.dart';
+import '../features/speaking/asr_model_store.dart';
+import '../features/speaking/feedback_writer.dart';
+import '../features/speaking/recorder.dart';
+import '../features/speaking/speaking_log.dart';
+import '../features/speaking/speech_recognizer.dart';
 import '../features/youtube/youtube_captions.dart';
 
 final bookRepositoryProvider = FutureProvider<BookRepository>((ref) async {
@@ -57,6 +62,32 @@ final segmentPlayerProvider = Provider<SegmentPlayer>((ref) {
   final player = createSegmentPlayer();
   ref.onDispose(player.dispose);
   return player;
+});
+
+final asrModelStoreProvider = Provider<AsrModelStore>((ref) => AsrModelStore());
+
+final speechRecorderProvider = Provider<SpeechRecorder>((ref) {
+  final recorder = RecordPackageRecorder();
+  ref.onDispose(recorder.dispose);
+  return recorder;
+});
+
+/// Speech recognizer; the model must have been installed via [AsrModelStore].
+final speechRecognizerProvider = FutureProvider<SpeechRecognizer>((ref) async {
+  final recognizer = SherpaRecognizer(await ref.read(asrModelStoreProvider).dir);
+  ref.onDispose(recognizer.dispose);
+  return recognizer;
+});
+
+final feedbackWriterProvider =
+    Provider<FeedbackWriter>((ref) => const LocalFeedbackWriter());
+
+/// Reading-aloud results of [bookId], loaded from their file.
+final speakingLogProvider = FutureProvider.family<SpeakingLog, String>((ref, bookId) async {
+  final docs = await getApplicationDocumentsDirectory();
+  final log = SpeakingLog(File('${docs.path}/speaking/$bookId.json'));
+  await log.load();
+  return log;
 });
 
 class BooksNotifier extends AsyncNotifier<List<Book>> {
