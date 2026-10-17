@@ -47,7 +47,7 @@ class ImportService {
   }) async {
     final book = await _loveRead.fetchBook(site, bookId,
         firstPage: firstPage, pageCount: pageCount, onProgress: onFetchProgress);
-    return _build(
+    final built = await _build(
       title: book.author == null ? book.title : '${book.title} — ${book.author}',
       paragraphs: book.paragraphs,
       sourceUrl: LoveReadSource.pageUrl(site, bookId, firstPage).toString(),
@@ -55,6 +55,51 @@ class ImportService {
       stress: stress,
       yo: yo,
     );
+    return built.appended(const [], nextPage: book.nextPage);
+  }
+
+  /// Appends the next [pageCount] pages (default: to the end) of a loveread
+  /// book that was imported earlier. Existing sentences keep their indices,
+  /// so the audio link, sync points, notes and translations stay valid.
+  Future<Book> appendPages(
+    Book book, {
+    int? pageCount,
+    Accentuator? accentuator,
+    bool stress = true,
+    bool yo = true,
+    void Function(int done, int total)? onFetchProgress,
+  }) async {
+    final url = Uri.tryParse(book.sourceUrl ?? '');
+    final id = url == null ? null : LoveReadSource.bookId(url);
+    if (url == null || id == null) {
+      throw FetchException('Only books imported from loveread can be extended.');
+    }
+    final site = LoveReadSource.siteOf(url);
+    final paragraphs =
+        book.sentences.isEmpty ? 0 : book.sentences.last.paragraph + 1;
+    final next = book.nextPage ??
+        await _loveRead.findNextPage(site, id, LoveReadSource.startPage(url), paragraphs);
+    final more = await _loveRead.fetchBook(site, id,
+        firstPage: next, pageCount: pageCount, onProgress: onFetchProgress);
+    if (more.paragraphs.isEmpty) throw FetchException('No more pages to add.');
+    final offset = book.sentences.isEmpty ? 0 : book.sentences.last.paragraph + 1;
+    final added = await _sentences(more.paragraphs, accentuator, stress, yo, offset);
+    return book.appended(added, nextPage: more.nextPage);
+  }
+
+  Future<List<BookSentence>> _sentences(List<String> paragraphs,
+      Accentuator? accentuator, bool stress, bool yo, int paragraphOffset) async {
+    final out = <BookSentence>[];
+    for (final s in _splitter.split(paragraphs.join('\n'))) {
+      final accented = accentuator == null
+          ? s.text
+          : await accentuator.accent(s.text, stress: stress, yo: yo);
+      out.add(BookSentence(
+          text: s.text,
+          accented: accented,
+          paragraph: s.paragraphIndex + paragraphOffset));
+    }
+    return out;
   }
 
   Future<Book> _build({
@@ -65,15 +110,7 @@ class ImportService {
     required bool stress,
     required bool yo,
   }) async {
-    final split = _splitter.split(paragraphs.join('\n'));
-    final sentences = <BookSentence>[];
-    for (final s in split) {
-      final accented = accentuator == null
-          ? s.text
-          : await accentuator.accent(s.text, stress: stress, yo: yo);
-      sentences.add(BookSentence(
-          text: s.text, accented: accented, paragraph: s.paragraphIndex));
-    }
+    final sentences = await _sentences(paragraphs, accentuator, stress, yo, 0);
     final now = DateTime.now();
     return Book(
       id: now.microsecondsSinceEpoch.toString(),

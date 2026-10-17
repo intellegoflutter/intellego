@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/book.dart';
+import '../library/add_pages_dialog.dart';
 import '../library/link_audio_screen.dart';
 import '../playback/audio_downloader.dart';
 import '../youtube/caption_models.dart';
@@ -227,6 +228,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           PopupMenuButton<String>(
             onSelected: (v) async {
               switch (v) {
+                case 'more':
+                  await showDialog<void>(
+                      context: context,
+                      builder: (_) => AddPagesDialog(bookId: book.id));
                 case 'languages':
                   await showDialog<void>(
                       context: context,
@@ -246,6 +251,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'languages', child: Text('Languages…')),
+              if (canAddPages(book))
+                const PopupMenuItem(value: 'more', child: Text('Add more pages…')),
               PopupMenuItem(value: 'link', child: Text(hasAudio ? 'Change audiobook' : 'Link audiobook')),
               if (hasAudio) ...const [
                 PopupMenuItem(value: 'copy', child: Text('Copy Ukrainian text')),

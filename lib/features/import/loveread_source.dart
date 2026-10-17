@@ -20,11 +20,21 @@ class LoveReadPage {
 }
 
 class LoveReadBook {
-  const LoveReadBook({required this.title, required this.author, required this.paragraphs});
+  const LoveReadBook({
+    required this.title,
+    required this.author,
+    required this.paragraphs,
+    required this.nextPage,
+    required this.lastPage,
+  });
 
   final String title;
   final String? author;
   final List<String> paragraphs;
+
+  /// First page after the ones fetched (may exceed [lastPage]).
+  final int nextPage;
+  final int lastPage;
 }
 
 /// Reads books from loveread.* (e.g. `https://loveread.ec/read_book.php?id=18249&p=1`).
@@ -85,6 +95,22 @@ class LoveReadSource {
     );
   }
 
+  /// First page not yet imported by a book that started at [firstPage] and
+  /// holds [paragraphCount] paragraphs: pages are walked until their
+  /// paragraphs add up to that count.
+  Future<int> findNextPage(Uri site, int id, int firstPage, int paragraphCount) async {
+    var seen = 0;
+    var page = firstPage;
+    while (seen < paragraphCount) {
+      final p = parsePage(await _fetcher.fetchHtml(pageUrl(site, id, page)));
+      seen += p.paragraphs.length;
+      page++;
+      if (page > p.lastPage) break;
+      await Future<void>.delayed(pageDelay);
+    }
+    return page;
+  }
+
   /// Fetches [pageCount] pages (all remaining pages when null) starting at
   /// [firstPage]. [onProgress] reports (pagesDone, pagesTotal).
   Future<LoveReadBook> fetchBook(
@@ -111,6 +137,12 @@ class LoveReadSource {
     if (paragraphs.isEmpty) {
       throw FetchException('No <p class=MsoNormal> text found for book $id');
     }
-    return LoveReadBook(title: first.title, author: first.author, paragraphs: paragraphs);
+    return LoveReadBook(
+      title: first.title,
+      author: first.author,
+      paragraphs: paragraphs,
+      nextPage: lastWanted + 1,
+      lastPage: lastAvailable,
+    );
   }
 }

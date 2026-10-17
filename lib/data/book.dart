@@ -177,6 +177,7 @@ class Book {
     this.sourceUrl,
     this.audio,
     this.translations = const [],
+    this.nextPage,
   });
 
   final String id;
@@ -186,6 +187,9 @@ class Book {
   final List<BookSentence> sentences;
   final LinkedAudio? audio;
   final List<Translation> translations;
+
+  /// loveread books: the first page that has not been imported yet.
+  final int? nextPage;
 
   int get practicedCount => sentences.where((s) => s.practiced).length;
 
@@ -214,34 +218,40 @@ class Book {
     return null;
   }
 
-  Book withSentences(List<BookSentence> next) => Book(
-        id: id,
-        title: title,
-        sourceUrl: sourceUrl,
-        createdAt: createdAt,
-        sentences: next,
-        audio: audio,
-        translations: translations,
-      );
-
-  Book withTranslations(List<Translation> next) => Book(
-        id: id,
-        title: title,
-        sourceUrl: sourceUrl,
-        createdAt: createdAt,
-        sentences: sentences,
-        audio: audio,
-        translations: next,
-      );
-
-  Book withAudio(LinkedAudio? next, {List<BookSentence>? sentences}) => Book(
+  Book _copy({
+    List<BookSentence>? sentences,
+    LinkedAudio? audio,
+    bool replaceAudio = false,
+    List<Translation>? translations,
+    int? nextPage,
+  }) =>
+      Book(
         id: id,
         title: title,
         sourceUrl: sourceUrl,
         createdAt: createdAt,
         sentences: sentences ?? this.sentences,
-        audio: next,
-        translations: translations,
+        audio: replaceAudio ? audio : this.audio,
+        translations: translations ?? this.translations,
+        nextPage: nextPage ?? this.nextPage,
+      );
+
+  Book withSentences(List<BookSentence> next) => _copy(sentences: next);
+
+  Book withTranslations(List<Translation> next) => _copy(translations: next);
+
+  Book withAudio(LinkedAudio? next, {List<BookSentence>? sentences}) =>
+      _copy(audio: next, replaceAudio: true, sentences: sentences);
+
+  /// Adds [more] sentences at the end; every translation gets empty lines
+  /// for them so indices (audio link, sync points) stay valid.
+  Book appended(List<BookSentence> more, {int? nextPage}) => _copy(
+        sentences: [...sentences, ...more],
+        translations: [
+          for (final t in translations)
+            t.copyWith(lines: [...t.lines, ...List.filled(more.length, '')])
+        ],
+        nextPage: nextPage,
       );
 
   Map<String, dynamic> toJson() => {
@@ -250,6 +260,7 @@ class Book {
         'sourceUrl': sourceUrl,
         'createdAt': createdAt.toIso8601String(),
         'sentences': [for (final s in sentences) s.toJson()],
+        if (nextPage != null) 'nextPage': nextPage,
         if (audio != null) 'audio': audio!.toJson(),
         if (translations.isNotEmpty)
           'translations': [for (final t in translations) t.toJson()],
@@ -271,5 +282,6 @@ class Book {
           for (final t in (j['translations'] as List? ?? const []))
             Translation.fromJson(t as Map<String, dynamic>)
         ],
+        nextPage: j['nextPage'] as int?,
       );
 }

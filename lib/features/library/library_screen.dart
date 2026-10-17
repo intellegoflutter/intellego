@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../reader/reader_screen.dart';
+import 'add_pages_dialog.dart';
 import 'import_screen.dart';
 import 'link_audio_screen.dart';
 
@@ -57,6 +58,10 @@ class LibraryScreen extends ConsumerWidget {
                           if (v == 'link') {
                             Navigator.of(context).push(MaterialPageRoute<void>(
                                 builder: (_) => LinkAudioScreen(bookId: b.id)));
+                          } else if (v == 'more') {
+                            showDialog<void>(
+                                context: context,
+                                builder: (_) => AddPagesDialog(bookId: b.id));
                           } else if (v == 'delete') {
                             ref.read(booksProvider.notifier).remove(b.id);
                           }
@@ -67,6 +72,8 @@ class LibraryScreen extends ConsumerWidget {
                               child: Text(b.audio == null
                                   ? 'Link audiobook (YouTube)'
                                   : 'Change audiobook')),
+                          if (canAddPages(b))
+                            const PopupMenuItem(value: 'more', child: Text('Add more pages…')),
                           const PopupMenuItem(value: 'delete', child: Text('Delete')),
                         ],
                       ),
