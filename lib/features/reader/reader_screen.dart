@@ -11,6 +11,7 @@ import '../../data/book.dart';
 import '../library/link_audio_screen.dart';
 import '../playback/audio_downloader.dart';
 import '../youtube/caption_models.dart';
+import 'translations_dialogs.dart';
 import 'ukrainian_text_tools.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
@@ -226,6 +227,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           PopupMenuButton<String>(
             onSelected: (v) async {
               switch (v) {
+                case 'languages':
+                  await showDialog<void>(
+                      context: context,
+                      builder: (_) => LanguagesDialog(bookId: book.id));
                 case 'link':
                   await Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => LinkAudioScreen(bookId: book.id)));
@@ -240,6 +245,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(value: 'languages', child: Text('Languages…')),
               PopupMenuItem(value: 'link', child: Text(hasAudio ? 'Change audiobook' : 'Link audiobook')),
               if (hasAudio) ...const [
                 PopupMenuItem(value: 'copy', child: Text('Copy Ukrainian text')),
@@ -314,6 +320,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           onToggle: () => _toggle(book, i),
           onEdit: () => _editUkrainian(book, i),
           onSync: () => _syncHere(book, i),
+          onTranslate: () => editSentenceTranslations(context, ref, book.id, i),
         ),
       );
   }
@@ -335,13 +342,14 @@ class _SentenceTile extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onSync,
+    required this.onTranslate,
   });
 
   final int index;
   final Book book;
   final bool showUkrainian;
   final bool playing;
-  final VoidCallback onPlay, onToggle, onEdit, onSync;
+  final VoidCallback onPlay, onToggle, onEdit, onSync, onTranslate;
 
   @override
   Widget build(BuildContext context) {
@@ -378,6 +386,29 @@ class _SentenceTile extends StatelessWidget {
                                     : theme.colorScheme.secondary,
                                 fontStyle: weak ? FontStyle.italic : null)),
                       ),
+                    for (final t in book.translations)
+                      if (t.visible)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: t.lines[index].isEmpty
+                              ? InkWell(
+                                  onTap: onTranslate,
+                                  child: Text('+ ${t.name}',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: theme.colorScheme.outline)),
+                                )
+                              : InkWell(
+                                  onTap: onTranslate,
+                                  child: Text.rich(TextSpan(children: [
+                                    TextSpan(
+                                        text: '${t.name}: ',
+                                        style: TextStyle(
+                                            color: theme.colorScheme.outline,
+                                            fontWeight: FontWeight.w600)),
+                                    TextSpan(text: t.lines[index]),
+                                  ]), style: theme.textTheme.bodyMedium),
+                                ),
+                        ),
                   ],
                 ),
               ),
@@ -387,17 +418,20 @@ class _SentenceTile extends StatelessWidget {
                   icon: Icon(playing ? Icons.volume_up : Icons.play_circle_outline),
                   onPressed: onPlay,
                 ),
-              if (book.audio != null)
-                PopupMenuButton<String>(
-                  onSelected: (v) {
-                    if (v == 'edit') onEdit();
-                    if (v == 'sync') onSync();
-                  },
-                  itemBuilder: (_) => [
-                    if (s.hasAudio) const PopupMenuItem(value: 'edit', child: Text('Edit Ukrainian')),
+              PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'edit') onEdit();
+                  if (v == 'sync') onSync();
+                  if (v == 'translate') onTranslate();
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'translate', child: Text('Edit languages…')),
+                  if (book.audio != null && s.hasAudio)
+                    const PopupMenuItem(value: 'edit', child: Text('Edit Ukrainian')),
+                  if (book.audio != null)
                     const PopupMenuItem(value: 'sync', child: Text('Sync here (audio is at this sentence)')),
-                  ],
-                ),
+                ],
+              ),
               Icon(
                 s.practiced ? Icons.check_circle : Icons.radio_button_unchecked,
                 color: s.practiced ? Colors.green : null,

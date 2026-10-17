@@ -134,6 +134,40 @@ class LinkedAudio {
       );
 }
 
+/// An extra language the user maintains for a book, one line per sentence
+/// (empty = not written yet). Edited by hand or pasted in bulk.
+class Translation {
+  const Translation({required this.name, required this.lines, this.visible = true});
+
+  /// Free-form label such as "English" or "Español".
+  final String name;
+  final List<String> lines;
+  final bool visible;
+
+  Translation copyWith({String? name, List<String>? lines, bool? visible}) =>
+      Translation(
+        name: name ?? this.name,
+        lines: lines ?? this.lines,
+        visible: visible ?? this.visible,
+      );
+
+  Translation withLine(int i, String text) {
+    final next = [...lines];
+    next[i] = text.trim();
+    return copyWith(lines: next);
+  }
+
+  int get filled => lines.where((l) => l.isNotEmpty).length;
+
+  Map<String, dynamic> toJson() => {'name': name, 'visible': visible, 'lines': lines};
+
+  factory Translation.fromJson(Map<String, dynamic> j) => Translation(
+        name: j['name'] as String,
+        visible: j['visible'] as bool? ?? true,
+        lines: (j['lines'] as List).cast<String>(),
+      );
+}
+
 class Book {
   const Book({
     required this.id,
@@ -142,6 +176,7 @@ class Book {
     required this.sentences,
     this.sourceUrl,
     this.audio,
+    this.translations = const [],
   });
 
   final String id;
@@ -150,6 +185,7 @@ class Book {
   final DateTime createdAt;
   final List<BookSentence> sentences;
   final LinkedAudio? audio;
+  final List<Translation> translations;
 
   int get practicedCount => sentences.where((s) => s.practiced).length;
 
@@ -185,6 +221,17 @@ class Book {
         createdAt: createdAt,
         sentences: next,
         audio: audio,
+        translations: translations,
+      );
+
+  Book withTranslations(List<Translation> next) => Book(
+        id: id,
+        title: title,
+        sourceUrl: sourceUrl,
+        createdAt: createdAt,
+        sentences: sentences,
+        audio: audio,
+        translations: next,
       );
 
   Book withAudio(LinkedAudio? next, {List<BookSentence>? sentences}) => Book(
@@ -194,6 +241,7 @@ class Book {
         createdAt: createdAt,
         sentences: sentences ?? this.sentences,
         audio: next,
+        translations: translations,
       );
 
   Map<String, dynamic> toJson() => {
@@ -203,6 +251,8 @@ class Book {
         'createdAt': createdAt.toIso8601String(),
         'sentences': [for (final s in sentences) s.toJson()],
         if (audio != null) 'audio': audio!.toJson(),
+        if (translations.isNotEmpty)
+          'translations': [for (final t in translations) t.toJson()],
       };
 
   factory Book.fromJson(Map<String, dynamic> j) => Book(
@@ -217,5 +267,9 @@ class Book {
         audio: j['audio'] == null
             ? null
             : LinkedAudio.fromJson(j['audio'] as Map<String, dynamic>),
+        translations: [
+          for (final t in (j['translations'] as List? ?? const []))
+            Translation.fromJson(t as Map<String, dynamic>)
+        ],
       );
 }
