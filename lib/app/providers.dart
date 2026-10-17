@@ -12,6 +12,8 @@ import '../features/nlp/accent/accent_dictionary_loader.dart';
 import '../features/nlp/accent/accentuator.dart';
 import '../features/nlp/accent/onnx/model_store.dart';
 import '../features/nlp/accent/onnx/onnx_accentuator_loader.dart';
+import '../features/playback/audio_downloader.dart';
+import '../features/playback/audio_store.dart';
 import '../features/playback/segment_player.dart';
 import '../features/youtube/youtube_captions.dart';
 
@@ -41,6 +43,15 @@ final importServiceProvider =
 final captionSourceProvider = Provider<CaptionSource>((ref) => YoutubeCaptionSource());
 
 final audioLinkerProvider = Provider<AudioLinker>((ref) => const AudioLinker());
+
+final audioStoreProvider = Provider<AudioStore>((ref) => AudioStore());
+
+final audioDownloaderProvider =
+    Provider<YtDlpDownloader>((ref) => YtDlpDownloader(ref.read(audioStoreProvider)));
+
+/// Local audio file of a video, null until downloaded or picked.
+final audioFileProvider = FutureProvider.family<File?, String>(
+    (ref, videoId) => ref.read(audioStoreProvider).find(videoId));
 
 final segmentPlayerProvider = Provider<SegmentPlayer>((ref) {
   final player = createSegmentPlayer();

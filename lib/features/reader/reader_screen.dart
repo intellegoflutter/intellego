@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/book.dart';
 import '../library/link_audio_screen.dart';
+import '../playback/audio_downloader.dart';
 import '../youtube/caption_models.dart';
 import 'ukrainian_text_tools.dart';
 
@@ -23,17 +26,53 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   bool _showUkrainian = true;
   int? _playing;
   bool _busy = false;
+  double? _downloadProgress;
 
   Future<void> _play(Book book, int i) async {
     final range = book.audioRangeFor(i);
     if (range == null) return;
+    final file = await ref.read(audioFileProvider(book.audio!.videoId).future);
+    if (file == null) {
+      _toast('Add the audio file first (banner at the top).');
+      return;
+    }
     setState(() => _playing = i);
     try {
-      await ref
-          .read(segmentPlayerProvider)
-          .playSegment(book.audio!.videoId, range.$1, range.$2);
+      await ref.read(segmentPlayerProvider).playSegment(file.path, range.$1, range.$2);
     } catch (e) {
       _toast('Playback failed: $e');
+    }
+  }
+
+  Future<void> _downloadAudio(Book book) async {
+    final id = book.audio!.videoId;
+    setState(() => _downloadProgress = 0);
+    try {
+      await ref.read(audioDownloaderProvider).download(id,
+          onProgress: (p) => setState(() => _downloadProgress = p));
+      ref.invalidate(audioFileProvider(id));
+      _toast('Audio downloaded.');
+    } catch (e) {
+      _toast('$e');
+    } finally {
+      if (mounted) setState(() => _downloadProgress = null);
+    }
+  }
+
+  Future<void> _pickAudio(Book book) async {
+    final id = book.audio!.videoId;
+    final picked = await FilePicker.pickFiles(type: FileType.audio);
+    final path = picked.isEmpty ? null : picked.first.path;
+    if (path == null) return;
+    setState(() => _downloadProgress = 0);
+    try {
+      await ref.read(audioStoreProvider).importFile(id, File(path));
+      ref.invalidate(audioFileProvider(id));
+      _toast('Audio added.');
+    } catch (e) {
+      _toast('Could not add the file: $e');
+    } finally {
+      if (mounted) setState(() => _downloadProgress = null);
     }
   }
 
@@ -221,7 +260,49 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       : book.practicedCount / book.sentences.length),
         ),
       ),
-      body: ListView.separated(
+      body: Column(children: [
+        if (hasAudio) _audioBanner(book),
+        Expanded(child: _list(book)),
+      ]),
+    );
+  }
+
+  Widget _audioBanner(Book book) {
+    final file = ref.watch(audioFileProvider(book.audio!.videoId));
+    if (file.isLoading || file.value != null) return const SizedBox.shrink();
+    final downloading = _downloadProgress != null;
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('The audio is not on this device yet. Playing sentences '
+              'needs the audiobook file.'),
+          const SizedBox(height: 8),
+          if (downloading)
+            LinearProgressIndicator(
+                value: _downloadProgress == 0 ? null : _downloadProgress)
+          else
+            Wrap(spacing: 8, children: [
+              if (YtDlpDownloader.supported)
+                FilledButton.icon(
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download from YouTube'),
+                  onPressed: () => _downloadAudio(book),
+                ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Choose audio file…'),
+                onPressed: () => _pickAudio(book),
+              ),
+            ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _list(Book book) {
+    return ListView.separated(
         itemCount: book.sentences.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) => _SentenceTile(
@@ -234,8 +315,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           onEdit: () => _editUkrainian(book, i),
           onSync: () => _syncHere(book, i),
         ),
-      ),
-    );
+      );
   }
 
   void _toggle(Book book, int i) {
