@@ -52,6 +52,33 @@ void main() {
     expect(r.beads.last.ukTo, 41);
   });
 
+  test('a passage missing from the audio is skipped, the text after it stays aligned', () {
+    final a = [for (var i = 0; i < 400; i++) ru(i * 3)];
+    // The audio lacks Russian sentences 150..229.
+    final b = [for (var i = 0; i < 400; i++) if (i < 150 || i >= 230) uk(i * 3)];
+    final r = alignSentences(a, b);
+    for (final x in r.beads.where((x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom)) {
+      if (x.ruFrom >= 232) expect(x.ukFrom, x.ruFrom - 80, reason: '$x');
+      if (x.ruFrom < 148) expect(x.ukFrom, x.ruFrom, reason: '$x');
+    }
+  });
+
+  test('an extra passage in the audio does not shift the text after it', () {
+    final a = [for (var i = 0; i < 400; i++) ru(i * 3)];
+    final b = [
+      for (var i = 0; i < 400; i++) ...[
+        if (i == 150)
+          for (var k = 0; k < 90; k++) uk(9000 + k * 3),
+        uk(i * 3),
+      ]
+    ];
+    final r = alignSentences(a, b);
+    for (final x in r.beads.where((x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom)) {
+      if (x.ruFrom >= 152) expect(x.ukFrom, x.ruFrom + 90, reason: '$x');
+      if (x.ruFrom < 148) expect(x.ukFrom, x.ruFrom, reason: '$x');
+    }
+  });
+
   test('empty input', () {
     expect(alignSentences(const [], const ['a']).beads, isEmpty);
     expect(alignSentences(const ['a'], const []).beads, isEmpty);

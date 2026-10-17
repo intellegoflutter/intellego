@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'coarse_alignment.dart';
 import 'sentence_similarity.dart';
 
 /// A group of Russian sentences `[ruFrom, ruTo)` that corresponds to a group
@@ -25,18 +26,28 @@ class AlignmentResult {
 
 /// Gale–Church length-based alignment, strengthened with word-stem overlap.
 ///
-/// 1. Anchors: windows of Ukrainian sentences are located in the Russian text
-///    by voting on rare shared stems; a monotone chain of confident anchors
-///    gives the expected path, so the audio may cover only part of the text
-///    (or the text only part of the audio).
-/// 2. Dynamic programming inside a band around that path over the bead types
-///    1-1, 1-0, 0-1, 2-1, 1-2 and 2-2.
+/// 1. A block-level alignment ([coarseAnchors]) finds where the two texts
+///    correspond, which tolerates passages missing from either side (the audio
+///    may be abridged or cover only part of the book). Texts too short for it
+///    fall back to a chain of rare-stem anchors.
+/// 2. Dynamic programming over the bead types 1-1, 1-0, 0-1, 2-1, 1-2 and 2-2
+///    inside a corridor around that path, pulled strongly towards it.
+/// 3. The pass is repeated around its own result with a little more freedom,
+///    because the block path is only accurate to a few sentences.
 AlignmentResult alignSentences(
   List<String> ru,
   List<String> uk, {
-  int band = 150,
-  double deviationPenalty = 1.5,
+  int? band,
+  double? deviationPenalty,
   double similarityWeight = 250,
+  double? skipPenalty,
+  int? tolerance,
+  bool polish = true,
+  int polishBand = 30,
+  int polishTolerance = 6,
+  int coarseBlockChars = 300,
+  double coarseMatch = 0.04,
+  double coarseGap = 0.04,
   int anchorWindow = 25,
   bool refine = false,
   List<(int ru, int uk)> manualAnchors = const [],
@@ -46,9 +57,45 @@ AlignmentResult alignSentences(
   }
   final ruSets = [for (final s in ru) stemSet(s)];
   final ukSets = [for (final s in uk) stemSet(s)];
-  var path = _expectedPath(ruSets, ukSets, anchorWindow, manualAnchors);
-  var result = _alignPass(ru, uk, ruSets, ukSets, path,
-      band: band, deviationPenalty: deviationPenalty, similarityWeight: similarityWeight);
+  final coarse = _coarsePath(ru, uk, ruSets, ukSets, manualAnchors,
+      blockChars: coarseBlockChars, match: coarseMatch, gap: coarseGap);
+  var path = coarse?.$1 ?? _expectedPath(ruSets, ukSets, anchorWindow, manualAnchors);
+  final ratio = coarse == null ? null : _lengthRatio(ru, uk, coarse.$2);
+  // The block-level path is reliable enough to hold the sentence pass close to
+  // it, which also lets a whole missing passage be skipped cheaply. The
+  // anchor-chain fallback needs a wide band and a gentle pull.
+  band ??= coarse != null ? 60 : 150;
+  deviationPenalty ??= coarse != null ? 30 : 1.5;
+  skipPenalty ??= 450;
+  tolerance ??= coarse != null ? 12 : 0;
+  final n0 = ru.length, m0 = uk.length;
+  var corridor = _corridor(coarse?.$2, path.at, n0, m0);
+  var result = _alignPass(ru, uk, ruSets, ukSets, path, corridor,
+      band: band,
+      deviationPenalty: deviationPenalty,
+      similarityWeight: similarityWeight,
+      skipPenalty: skipPenalty,
+      tolerance: tolerance,
+      ratio: ratio);
+  if (coarse != null && polish) {
+    // Polish: the block path is only accurate to a few sentences, so run the
+    // pass again around its own result with room to move by a few sentences.
+    final points = [
+      for (final b in result.beads)
+        if (b.ruTo > b.ruFrom && b.ukTo > b.ukFrom) (b.ukFrom, b.ruFrom)
+    ];
+    final polished = _pathFromPoints(points, ru.length, uk.length);
+    if (polished != null) {
+      result = _alignPass(ru, uk, ruSets, ukSets, polished,
+          _corridor(points, polished.at, n0, m0),
+          band: math.min(band, polishBand),
+          deviationPenalty: deviationPenalty,
+          similarityWeight: similarityWeight,
+          skipPenalty: skipPenalty,
+          tolerance: polishTolerance,
+          ratio: ratio);
+    }
+  }
   if (!refine) return result;
   // Second pass: sentences that matched convincingly become the anchors.
   final points = <(int q, int r)>[];
@@ -61,8 +108,40 @@ AlignmentResult alignSentences(
   final refined = _pathFromPoints(_dropOutliers(points), ru.length, uk.length);
   if (refined == null) return result;
   path = refined;
-  return _alignPass(ru, uk, ruSets, ukSets, path,
-      band: band ~/ 2, deviationPenalty: deviationPenalty * 2, similarityWeight: similarityWeight);
+  return _alignPass(ru, uk, ruSets, ukSets, path, _corridor(null, path.at, n0, m0),
+      band: band ~/ 2,
+      deviationPenalty: deviationPenalty * 2,
+      similarityWeight: similarityWeight,
+      skipPenalty: skipPenalty,
+      tolerance: 0,
+      ratio: ratio);
+}
+
+/// The expected path from the block-level alignment, kept consistent with the
+/// [manual] anchors; null when the texts are too short for it.
+(
+  ({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast}) path,
+  List<(int q, int r)> points,
+)? _coarsePath(List<String> ru, List<String> uk, List<Set<int>> ruSets,
+        List<Set<int>> ukSets, List<(int ru, int uk)> manual,
+        {required int blockChars, required double match, required double gap}) {
+  final points = coarseAnchors(ruSets, ukSets, [for (final s in ru) s.length],
+      [for (final s in uk) s.length],
+      blockChars: blockChars, matchThreshold: match, gapCost: gap);
+  if (points == null || points.length < 3) return null;
+  final fixed = [...manual]..sort((a, b) => a.$1.compareTo(b.$1));
+  final chain = <(int q, int r)>[
+    for (final p in points)
+      if (fixed.every((f) => (p.$2 < f.$1) == (p.$1 < f.$2) && p.$2 != f.$1 && p.$1 != f.$2)) p,
+    for (final f in fixed) (f.$2, f.$1),
+  ]..sort((a, b) => a.$2.compareTo(b.$2));
+  // Manual anchors may leave the chain non-monotone on the Ukrainian side.
+  final mono = <(int q, int r)>[];
+  for (final p in chain) {
+    if (mono.isEmpty || p.$1 > mono.last.$1 && p.$2 > mono.last.$2) mono.add(p);
+  }
+  final path = _pathFromPoints(mono, ru.length, uk.length);
+  return path == null ? null : (path, mono);
 }
 
 Set<int> _union(List<Set<int>> sets, int from, int to) {
@@ -72,6 +151,58 @@ Set<int> _union(List<Set<int>> sets, int from, int to) {
     u.addAll(sets[k]);
   }
   return u;
+}
+
+/// For every Russian row, the range of Ukrainian indices the expected path
+/// may pass through. Between two anchors that are far apart in one text only
+/// (a passage missing from the other) the position inside the stretch is
+/// unknown, so the whole stretch is allowed; elsewhere the path is a line.
+(Int32List, Int32List) _corridor(
+    List<(int q, int r)>? points, double Function(int) at, int n, int m) {
+  final lo = Int32List(n + 1), hi = Int32List(n + 1);
+  for (var i = 0; i <= n; i++) {
+    lo[i] = hi[i] = at(i).round().clamp(0, m);
+  }
+  if (points != null) {
+    for (var k = 0; k + 1 < points.length; k++) {
+      final (q0, r0) = points[k];
+      final (q1, r1) = points[k + 1];
+      final dq = q1 - q0, dr = r1 - r0;
+      if (dq <= 2 * dr + 12 && dr <= 2 * dq + 12) continue;
+      // The block path only locates the jump to within a block or so.
+      for (var i = math.max(0, r0 - 12); i <= r1 + 12 && i <= n; i++) {
+        final centre = at(i).round().clamp(0, m);
+        final from = math.max(q0, centre - 200).clamp(0, m);
+        final to = math.min(q1, centre + 200).clamp(0, m);
+        if (from > to) continue;
+        lo[i] = math.min(lo[i], from);
+        hi[i] = math.max(hi[i], to);
+      }
+    }
+  }
+  return (lo, hi);
+}
+
+/// Median Ukrainian-to-Russian length ratio over the stretches between
+/// neighbouring anchor [points]. Stretches where one text lacks a passage
+/// would skew an overall ratio, the median ignores them.
+double _lengthRatio(List<String> ru, List<String> uk, List<(int q, int r)> points) {
+  final ratios = <double>[];
+  for (var k = 1; k < points.length; k++) {
+    final dq = points[k].$1 - points[k - 1].$1, dr = points[k].$2 - points[k - 1].$2;
+    if (dq <= 0 || dr <= 0 || dr > 40 || dq > 40) continue;
+    var u = 0, r = 0;
+    for (var j = points[k - 1].$1; j < points[k].$1; j++) {
+      u += uk[j].length;
+    }
+    for (var i = points[k - 1].$2; i < points[k].$2; i++) {
+      r += ru[i].length;
+    }
+    if (r > 0 && u > 0) ratios.add(u / r);
+  }
+  if (ratios.isEmpty) return 1;
+  ratios.sort();
+  return ratios[ratios.length ~/ 2];
 }
 
 /// Drops points whose Ukrainian index strays from the median of their
@@ -96,17 +227,17 @@ AlignmentResult _alignPass(
   List<String> uk,
   List<Set<int>> ruSets,
   List<Set<int>> ukSets,
-  ({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast}) path, {
+  ({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast}) path,
+  (Int32List lo, Int32List hi) corridor, {
   required int band,
   required double deviationPenalty,
   required double similarityWeight,
+  required double skipPenalty,
+  required int tolerance,
+  double? ratio,
 }) {
   final n = ru.length, m = uk.length;
-  // centers[i]: expected Ukrainian index at Russian row i.
-  final centers = Int32List(n + 1);
-  for (var i = 0; i <= n; i++) {
-    centers[i] = path.at(i).round().clamp(0, m);
-  }
+  final (cLo, cHi) = corridor;
 
   // Characters-per-character ratio, measured on the anchored span only.
   var ruChars = 0, ukChars = 0;
@@ -118,31 +249,39 @@ AlignmentResult _alignPass(
   for (var j = ukA; j < ukB && j < m; j++) {
     ukChars += uk[j].length;
   }
-  final c = ruChars == 0 || ukChars == 0 ? 1.0 : ukChars / ruChars;
+  final c = ratio ?? (ruChars == 0 || ukChars == 0 ? 1.0 : ukChars / ruChars);
   final ruLen = Int32List.fromList([for (final s in ru) s.length]);
   final ukLen = Int32List.fromList([for (final s in uk) s.length]);
 
   const types = [(1, 1), (1, 0), (0, 1), (2, 1), (1, 2), (2, 2)];
-  const penalty = [0.0, 450.0, 450.0, 230.0, 230.0, 440.0];
+  final penalty = [0.0, skipPenalty, skipPenalty, 230.0, 230.0, 440.0];
 
-  final width = 2 * band + 1;
-  int lo(int i) => math.max(0, centers[i] - band);
-  const inf = double.infinity;
-  final cost = Float32List((n + 1) * width)..fillRange(0, (n + 1) * width, inf);
-  final back = Uint8List((n + 1) * width);
-
-  int idx(int i, int j) => i * width + (j - lo(i));
-  bool inBand(int i, int j) {
-    final d = j - lo(i);
-    return d >= 0 && d < width && j <= m;
-  }
-
-  cost[idx(0, 0)] = 0;
+  // Row i holds the Ukrainian columns [rowLo[i], rowHi[i]]: the corridor of the
+  // expected path widened by [band].
+  final rowLo = Int32List(n + 1), rowHi = Int32List(n + 1);
+  final rowStart = Int32List(n + 2);
   for (var i = 0; i <= n; i++) {
-    final jLo = lo(i);
-    final jHi = math.min(m, jLo + width - 1);
+    rowLo[i] = math.max(0, cLo[i] - band);
+    rowHi[i] = math.min(m, cHi[i] + band);
+    rowStart[i + 1] = rowStart[i] + rowHi[i] - rowLo[i] + 1;
+  }
+  const inf = double.infinity;
+  final cost = Float32List(rowStart[n + 1])..fillRange(0, rowStart[n + 1], inf);
+  final back = Uint8List(rowStart[n + 1]);
+
+  int idx(int i, int j) => rowStart[i] + j - rowLo[i];
+  bool inBand(int i, int j) => j >= rowLo[i] && j <= rowHi[i];
+
+  // The text may start before the audio does (or the other way round).
+  const leftover = 60.0;
+  for (var i = 0; i <= n; i++) {
+    final jLo = rowLo[i];
+    final jHi = rowHi[i];
     for (var j = jLo; j <= jHi; j++) {
-      if (i == 0 && j == 0) continue;
+      if (i == 0 && j == jLo) {
+        cost[idx(0, j)] = leftover * j;
+        continue;
+      }
       var best = inf;
       var bestT = 0;
       for (var t = 0; t < types.length; t++) {
@@ -158,10 +297,13 @@ AlignmentResult _alignPass(
         for (var k = pj; k < j; k++) {
           l2 += ukLen[k];
         }
+        // A sentence with no counterpart costs a flat amount: the length model
+        // would make a long missing passage unaffordable.
         var total = prev +
             penalty[t] +
-            _lengthCost(l1, l2, c) +
-            deviationPenalty * (j - centers[i]).abs();
+            (t == 1 || t == 2 ? 0 : _lengthCost(l1, l2, c)) +
+            deviationPenalty *
+                math.max(0, math.max(cLo[i] - tolerance - j, j - cHi[i] - tolerance));
         if (di > 0 && dj > 0 && similarityWeight > 0) {
           total -= similarityWeight *
               stemSimilarity(_union(ruSets, pi, i), _union(ukSets, pj, j));
@@ -178,10 +320,9 @@ AlignmentResult _alignPass(
 
   // Either text may end before the other: pick the cheapest end cell where
   // leftover sentences cost a small penalty each.
-  const leftover = 60.0;
   var i = n, j = 0;
   var bestEnd = inf;
-  for (var jj = math.max(0, lo(n)); jj <= math.min(m, lo(n) + width - 1); jj++) {
+  for (var jj = rowLo[n]; jj <= rowHi[n]; jj++) {
     final total = cost[idx(n, jj)] + leftover * (m - jj);
     if (total < bestEnd) {
       bestEnd = total;
@@ -202,13 +343,14 @@ AlignmentResult _alignPass(
   final beads = <Bead>[];
   if (endJ < m) beads.add(Bead(endI, endI, endJ, m));
   if (endI < n) beads.add(Bead(endI, n, endJ, endJ));
-  while (i > 0 || j > 0) {
+  while (i > 0 || (j > 0 && !(i == 0 && j == rowLo[0]))) {
     final t = back[idx(i, j)];
     final di = types[t].$1, dj = types[t].$2;
     beads.add(Bead(i - di, i, j - dj, j));
     i -= di;
     j -= dj;
   }
+  if (i == 0 && j > 0) beads.add(Bead(0, 0, 0, j));
   final ordered = beads.reversed.toList();
   return AlignmentResult(ordered, ruStart: 0, ruEnd: n);
 }
