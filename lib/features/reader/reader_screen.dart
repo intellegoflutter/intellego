@@ -196,6 +196,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
             final book =
                 ref.read(booksProvider).value?.where((b) => b.id == bookId).firstOrNull;
             if (book != null) _toggle(book, i);
+            Navigator.pop(sheetContext, 'practiced');
           },
         ));
       }),
