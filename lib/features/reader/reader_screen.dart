@@ -171,6 +171,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       appBar: AppBar(
         title: Text(book.title, overflow: TextOverflow.ellipsis),
         actions: [
+          if (!hasAudio)
+            IconButton(
+              tooltip: 'Link audiobook (YouTube)',
+              icon: const Icon(Icons.headphones),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => LinkAudioScreen(bookId: book.id))),
+            ),
           if (hasAudio)
             IconButton(
               tooltip: _showUkrainian ? 'Hide Ukrainian' : 'Show Ukrainian',

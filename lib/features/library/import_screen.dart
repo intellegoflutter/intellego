@@ -10,6 +10,7 @@ import '../nlp/accent/onnx/model_store.dart';
 const _prefAccent = 'import.addStressAndYo';
 const _prefNeural = 'import.neuralAccent';
 const _prefSite = 'import.siteUrl';
+const _prefLastInput = 'import.lastInput';
 
 class ImportScreen extends ConsumerStatefulWidget {
   const ImportScreen({super.key});
@@ -43,7 +44,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           _accent = prefs.getBool(_prefAccent) ?? true;
           _neural = prefs.getBool(_prefNeural) ?? false;
           _site = Uri.tryParse(prefs.getString(_prefSite) ?? '') ?? _site;
-          if (_url.text.isEmpty) _url.text = inputPrefix(_site);
+          if (_url.text.isEmpty) {
+            _url.text = prefs.getString(_prefLastInput) ?? inputPrefix(_site);
+          }
         });
       }
     } catch (_) {
@@ -74,6 +77,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefAccent, _accent);
       await prefs.setBool(_prefNeural, _neural);
+      await prefs.setString(_prefLastInput, _url.text.trim());
       if (target is LoveReadTarget) {
         _site = target.site;
         await prefs.setString(_prefSite, _site.toString());
