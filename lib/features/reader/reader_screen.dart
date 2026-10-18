@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,6 +22,7 @@ import '../speaking/recorder.dart';
 import '../speaking/speaking_log.dart';
 import '../speaking/speaking_sheet.dart';
 import '../youtube/caption_models.dart';
+import 'reader_font.dart';
 import 'reading_position.dart';
 import 'translations_dialogs.dart';
 import 'ukrainian_text_tools.dart';
@@ -53,10 +55,67 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   int _topIndex = 0;
   Timer? _saveTimer;
 
+  // Text size: Ctrl + wheel, Ctrl +/-/0, or pinching with two fingers.
+  final _pointers = <int, Offset>{};
+  double? _pinchStartDistance;
+  double _pinchStartSize = ReaderFontSize.defaultSize;
+  bool _ctrlDown = false;
+
+  bool get _pinching => _pointers.length >= 2;
+
+  bool _onKey(KeyEvent event) {
+    final down = HardwareKeyboard.instance.isControlPressed;
+    if (down != _ctrlDown && mounted) setState(() => _ctrlDown = down);
+    return false;
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _pointers[e.pointer] = e.position;
+    if (_pointers.length == 2) {
+      _pinchStartDistance = _pinchDistance();
+      _pinchStartSize = ref.read(readerFontSizeProvider);
+      setState(() {}); // stop scrolling while two fingers are down
+    }
+  }
+
+  double _pinchDistance() {
+    final points = _pointers.values.take(2).toList();
+    return (points[0] - points[1]).distance;
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_pointers.containsKey(e.pointer)) return;
+    _pointers[e.pointer] = e.position;
+    final start = _pinchStartDistance;
+    if (_pointers.length >= 2 && start != null && start > 0) {
+      ref
+          .read(readerFontSizeProvider.notifier)
+          .set(_pinchStartSize * _pinchDistance() / start);
+    }
+  }
+
+  void _onPointerEnd(PointerEvent e) {
+    final was = _pinching;
+    _pointers.remove(e.pointer);
+    if (was && !_pinching) {
+      _pinchStartDistance = null;
+      setState(() {});
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent e) {
+    if (e is PointerScrollEvent && HardwareKeyboard.instance.isControlPressed) {
+      final notifier = ref.read(readerFontSizeProvider.notifier);
+      if (e.scrollDelta.dy < 0) notifier.bigger();
+      if (e.scrollDelta.dy > 0) notifier.smaller();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onKey);
     _positions.itemPositions.addListener(_onScrolled);
     ReadingPosition.load(widget.bookId).then((i) {
       if (mounted) setState(() => _startIndex = i);
@@ -309,6 +368,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
     WidgetsBinding.instance.removeObserver(this);
     _positions.itemPositions.removeListener(_onScrolled);
     _saveTimer?.cancel();
@@ -809,11 +869,48 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                 ),
         ),
       ),
-      body: Column(
-        children: [
-          if (hasAudio) _audioBanner(book),
-          Expanded(child: _list(book)),
-        ],
+      body: CallbackShortcuts(
+        bindings: {
+          for (final key in [
+            const SingleActivator(LogicalKeyboardKey.equal, control: true),
+            const SingleActivator(
+              LogicalKeyboardKey.equal,
+              control: true,
+              shift: true,
+            ),
+            const SingleActivator(LogicalKeyboardKey.numpadAdd, control: true),
+          ])
+            key: ref.read(readerFontSizeProvider.notifier).bigger,
+          for (final key in [
+            const SingleActivator(LogicalKeyboardKey.minus, control: true),
+            const SingleActivator(
+              LogicalKeyboardKey.numpadSubtract,
+              control: true,
+            ),
+          ])
+            key: ref.read(readerFontSizeProvider.notifier).smaller,
+          for (final key in [
+            const SingleActivator(LogicalKeyboardKey.digit0, control: true),
+            const SingleActivator(LogicalKeyboardKey.numpad0, control: true),
+          ])
+            key: ref.read(readerFontSizeProvider.notifier).reset,
+        },
+        child: Focus(
+          autofocus: true,
+          child: Listener(
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: _onPointerEnd,
+            onPointerCancel: _onPointerEnd,
+            onPointerSignal: _onPointerSignal,
+            child: Column(
+              children: [
+                if (hasAudio) _audioBanner(book),
+                Expanded(child: _list(book)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -889,8 +986,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final attempts = ref.watch(speakingLogProvider(book.id)).value;
     final start = _startIndex;
     if (start == null) return const SizedBox.shrink();
+    final fontSize = ref.watch(readerFontSizeProvider);
     return ScrollablePositionedList.separated(
       itemPositionsListener: _positions,
+      // Not while pinching or while Ctrl is held: the wheel changes the size.
+      physics: _pinching || _ctrlDown
+          ? const NeverScrollableScrollPhysics()
+          : null,
       initialScrollIndex: start.clamp(
         0,
         book.sentences.isEmpty ? 0 : book.sentences.length - 1,
@@ -900,6 +1002,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       itemBuilder: (context, i) => _SentenceTile(
         index: i,
         book: book,
+        fontSize: fontSize,
         playing: _playing == i ? _playingTrack : null,
         speaking: _speakingIndex == i ? _speakingLanguage : null,
         onSpeak: (text, language) => _speak(i, text, language: language),
@@ -930,6 +1033,7 @@ class _SentenceTile extends StatelessWidget {
   const _SentenceTile({
     required this.index,
     required this.book,
+    required this.fontSize,
     required this.playing,
     required this.speaking,
     required this.onSpeak,
@@ -948,6 +1052,9 @@ class _SentenceTile extends StatelessWidget {
 
   final int index;
   final Book book;
+
+  /// Size of every language line; labels and hints are scaled from it.
+  final double fontSize;
 
   /// Index of the track whose audio of this sentence is playing, if any.
   final int? playing;
@@ -985,6 +1092,7 @@ class _SentenceTile extends StatelessWidget {
               style: theme.textTheme.labelSmall?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w700,
+                fontSize: fontSize * 0.7,
               ),
             ),
             TextSpan(
@@ -992,6 +1100,8 @@ class _SentenceTile extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: weak ? theme.colorScheme.outline : color,
                 fontStyle: weak ? FontStyle.italic : null,
+                fontSize: fontSize,
+                height: 1.4,
               ),
             ),
             WidgetSpan(
@@ -1055,7 +1165,10 @@ class _SentenceTile extends StatelessWidget {
                           ),
                         ],
                       ),
-                      style: theme.textTheme.titleLarge?.copyWith(height: 1.4),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontSize: fontSize,
+                        height: 1.4,
+                      ),
                     ),
                     if (best != null)
                       Padding(
@@ -1064,6 +1177,7 @@ class _SentenceTile extends StatelessWidget {
                           'Read aloud ${best!.attempts}×, best ${(best!.best * 100).round()}%',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.outline,
+                            fontSize: fontSize * 0.65,
                           ),
                         ),
                       ),
@@ -1082,6 +1196,7 @@ class _SentenceTile extends StatelessWidget {
                                     '+ ${t.name}',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.outline,
+                                      fontSize: fontSize * 0.8,
                                     ),
                                   ),
                                 )
@@ -1127,7 +1242,10 @@ class _SentenceTile extends StatelessWidget {
                                           ),
                                       ],
                                     ),
-                                    style: theme.textTheme.bodyMedium,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontSize: fontSize,
+                                      height: 1.4,
+                                    ),
                                   ),
                                 ),
                         ),
