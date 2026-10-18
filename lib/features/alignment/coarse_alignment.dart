@@ -97,10 +97,15 @@ List<(int q, int r)>? coarseAnchors(
   // free, gaps in the middle cost [gapCost] per block.
   final w1 = m + 1;
   final score = Float32List((n + 1) * w1);
-  final back = Uint8List((n + 1) * w1); // 0 diagonal, 1 skip Russian, 2 skip Ukrainian
+  final back = Uint8List(
+    (n + 1) * w1,
+  ); // 0 diagonal, 1 skip Russian, 2 skip Ukrainian
   for (var i = 1; i <= n; i++) {
     for (var j = 1; j <= m; j++) {
-      final diag = score[(i - 1) * w1 + j - 1] + sim[(i - 1) * m + j - 1] - matchThreshold;
+      final diag =
+          score[(i - 1) * w1 + j - 1] +
+          sim[(i - 1) * m + j - 1] -
+          matchThreshold;
       final up = score[(i - 1) * w1 + j] - gapCost;
       final left = score[i * w1 + j - 1] - gapCost;
       var best = diag, move = 0;

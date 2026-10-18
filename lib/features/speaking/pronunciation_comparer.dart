@@ -25,7 +25,12 @@ enum WordStatus {
 }
 
 class WordResult {
-  const WordResult(this.status, {this.expected, this.heard, this.similarity = 0});
+  const WordResult(
+    this.status, {
+    this.expected,
+    this.heard,
+    this.similarity = 0,
+  });
 
   final WordStatus status;
 
@@ -51,10 +56,12 @@ class Comparison {
 
   final List<WordResult> words;
 
-  Iterable<WordResult> get _expected => words.where((w) => w.status != WordStatus.extra);
+  Iterable<WordResult> get _expected =>
+      words.where((w) => w.status != WordStatus.extra);
 
   int get expectedCount => _expected.length;
-  int get correctCount => words.where((w) => w.status == WordStatus.correct).length;
+  int get correctCount =>
+      words.where((w) => w.status == WordStatus.correct).length;
 
   /// Share of the expected words that were heard correctly, 0..1.
   double get score => expectedCount == 0 ? 0 : correctCount / expectedCount;
@@ -92,7 +99,12 @@ List<(String shown, String key)> comparableWords(String text) {
     if (token.isEmpty || RegExp(r'\d').hasMatch(token)) continue;
     for (final part in token.split(RegExp(r'[-‐‑–—]'))) {
       final key = normalizeWord(part);
-      if (key.isNotEmpty) out.add((part.replaceAll(RegExp(r'^[^\wа-яёА-ЯЁ]+|[^\wа-яёА-ЯЁ́]+$'), ''), key));
+      if (key.isNotEmpty) {
+        out.add((
+          part.replaceAll(RegExp(r'^[^\wа-яёА-ЯЁ]+|[^\wа-яёА-ЯЁ́]+$'), ''),
+          key,
+        ));
+      }
     }
   }
   return out;
@@ -110,8 +122,13 @@ int _levenshtein(String a, String b) {
   for (var i = 1; i <= a.length; i++) {
     final cur = List<int>.filled(b.length + 1, 0)..[0] = i;
     for (var j = 1; j <= b.length; j++) {
-      final sub = prev[j - 1] + (a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1);
-      cur[j] = [sub, prev[j] + 1, cur[j - 1] + 1].reduce((x, y) => x < y ? x : y);
+      final sub =
+          prev[j - 1] + (a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1);
+      cur[j] = [
+        sub,
+        prev[j] + 1,
+        cur[j - 1] + 1,
+      ].reduce((x, y) => x < y ? x : y);
     }
     prev = cur;
   }
@@ -150,11 +167,21 @@ Comparison compareWords({required String accented, required String heard}) {
     if (i > 0 && j > 0) {
       final sim = _similarity(exp[i - 1].$2, got[j - 1].$2);
       if ((cost[i][j] - (cost[i - 1][j - 1] + 1 - sim)).abs() < 1e-9) {
-        out.add(sim == 1
-            ? WordResult(WordStatus.correct,
-                expected: exp[i - 1].$1, heard: got[j - 1].$1, similarity: 1)
-            : WordResult(WordStatus.misheard,
-                expected: exp[i - 1].$1, heard: got[j - 1].$1, similarity: sim));
+        out.add(
+          sim == 1
+              ? WordResult(
+                  WordStatus.correct,
+                  expected: exp[i - 1].$1,
+                  heard: got[j - 1].$1,
+                  similarity: 1,
+                )
+              : WordResult(
+                  WordStatus.misheard,
+                  expected: exp[i - 1].$1,
+                  heard: got[j - 1].$1,
+                  similarity: sim,
+                ),
+        );
         i--;
         j--;
         continue;

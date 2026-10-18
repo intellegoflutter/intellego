@@ -30,12 +30,17 @@ Pcm readWavPcm16(Uint8List bytes) {
       rate = d.getUint32(body + 4, Endian.little);
       bits = d.getUint16(body + 14, Endian.little);
     } else if (id == 'data') {
-      if (format != 1 || bits != 16 || rate == null || channels == null || channels < 1) {
+      if (format != 1 ||
+          bits != 16 ||
+          rate == null ||
+          channels == null ||
+          channels < 1) {
         throw FormatException('Unsupported WAV (format $format, $bits bits)');
       }
       final available = bytes.length - body;
       // Streamed files may announce a size of 0 or 0xFFFFFFFF.
-      final length = (size == 0 || size > available ? available : size) ~/ (2 * channels);
+      final length =
+          (size == 0 || size > available ? available : size) ~/ (2 * channels);
       final out = Float32List(length);
       for (var i = 0; i < length; i++) {
         var sum = 0;

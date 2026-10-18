@@ -50,7 +50,11 @@ class _AddPagesDialogState extends ConsumerState<AddPagesDialog> {
   }
 
   Future<void> _run() async {
-    final book = ref.read(booksProvider).value?.where((b) => b.id == widget.bookId).firstOrNull;
+    final book = ref
+        .read(booksProvider)
+        .value
+        ?.where((b) => b.id == widget.bookId)
+        .firstOrNull;
     if (book == null) return;
     setState(() {
       _busy = true;
@@ -59,7 +63,9 @@ class _AddPagesDialogState extends ConsumerState<AddPagesDialog> {
     });
     try {
       final accentuator = await _accentuator();
-      var updated = await ref.read(importServiceProvider).appendPages(
+      var updated = await ref
+          .read(importServiceProvider)
+          .appendPages(
             book,
             pageCount: int.tryParse(_count.text.trim()),
             accentuator: accentuator,
@@ -87,8 +93,13 @@ class _AddPagesDialogState extends ConsumerState<AddPagesDialog> {
       }
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Added ${updated.sentences.length - book.sentences.length} sentences.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Added ${updated.sentences.length - book.sentences.length} sentences.',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -99,39 +110,59 @@ class _AddPagesDialogState extends ConsumerState<AddPagesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final book = ref.watch(booksProvider).value?.where((b) => b.id == widget.bookId).firstOrNull;
+    final book = ref
+        .watch(booksProvider)
+        .value
+        ?.where((b) => b.id == widget.bookId)
+        .firstOrNull;
     return AlertDialog(
       title: const Text('Add more pages'),
       content: SizedBox(
         width: 460,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${book?.title ?? ''}\n'
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${book?.title ?? ''}\n'
               'Continues after the last imported page. Your audio link, practice '
-              'progress and extra languages are kept.'),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _count,
-            enabled: !_busy,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Number of pages (empty = to the end)',
-              border: OutlineInputBorder(),
+              'progress and extra languages are kept.',
             ),
-          ),
-          if (_busy) ...[
             const SizedBox(height: 12),
-            LinearProgressIndicator(value: _progress),
-            if (_status != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_status!)),
-          ],
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            TextField(
+              controller: _count,
+              enabled: !_busy,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Number of pages (empty = to the end)',
+                border: OutlineInputBorder(),
+              ),
             ),
-        ]),
+            if (_busy) ...[
+              const SizedBox(height: 12),
+              LinearProgressIndicator(value: _progress),
+              if (_status != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(_status!),
+                ),
+            ],
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
+        ),
       ),
       actions: [
-        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(onPressed: _busy ? null : _run, child: const Text('Add')),
       ],
     );

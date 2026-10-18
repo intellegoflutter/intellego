@@ -13,6 +13,9 @@ class NoopAccentuator implements Accentuator {
   const NoopAccentuator();
 
   @override
-  Future<String> accent(String text, {bool stress = true, bool yo = true}) async =>
-      text;
+  Future<String> accent(
+    String text, {
+    bool stress = true,
+    bool yo = true,
+  }) async => text;
 }

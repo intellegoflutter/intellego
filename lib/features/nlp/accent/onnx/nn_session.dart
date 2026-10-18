@@ -44,7 +44,10 @@ class OrtNnSession implements NnSession {
           'token_type_ids' => tokenTypeIds ?? List.filled(n, 0),
           _ => throw StateError('Unsupported model input: $name'),
         };
-        tensors[name] = await OrtValue.fromList(Int64List.fromList(values), [1, n]);
+        tensors[name] = await OrtValue.fromList(Int64List.fromList(values), [
+          1,
+          n,
+        ]);
       }
       final outputs = await _session.run(tensors);
       final out = outputs['logits'] ?? outputs.values.first;

@@ -16,7 +16,11 @@ class Bead {
 }
 
 class AlignmentResult {
-  const AlignmentResult(this.beads, {required this.ruStart, required this.ruEnd});
+  const AlignmentResult(
+    this.beads, {
+    required this.ruStart,
+    required this.ruEnd,
+  });
 
   final List<Bead> beads;
 
@@ -61,9 +65,18 @@ AlignmentResult alignSentences(
   // the caller supplies its own (another language, or a translation).
   final ruSets = ruStems ?? [for (final s in ru) stemSet(s)];
   final ukSets = ukStems ?? [for (final s in uk) stemSet(s)];
-  final coarse = _coarsePath(ru, uk, ruSets, ukSets, manualAnchors,
-      blockChars: coarseBlockChars, match: coarseMatch, gap: coarseGap);
-  var path = coarse?.$1 ?? _expectedPath(ruSets, ukSets, anchorWindow, manualAnchors);
+  final coarse = _coarsePath(
+    ru,
+    uk,
+    ruSets,
+    ukSets,
+    manualAnchors,
+    blockChars: coarseBlockChars,
+    match: coarseMatch,
+    gap: coarseGap,
+  );
+  var path =
+      coarse?.$1 ?? _expectedPath(ruSets, ukSets, anchorWindow, manualAnchors);
   final ratio = coarse == null ? null : _lengthRatio(ru, uk, coarse.$2);
   // The block-level path is reliable enough to hold the sentence pass close to
   // it, which also lets a whole missing passage be skipped cheaply. The
@@ -74,30 +87,43 @@ AlignmentResult alignSentences(
   tolerance ??= coarse != null ? 12 : 0;
   final n0 = ru.length, m0 = uk.length;
   var corridor = _corridor(coarse?.$2, path.at, n0, m0);
-  var result = _alignPass(ru, uk, ruSets, ukSets, path, corridor,
-      band: band,
-      deviationPenalty: deviationPenalty,
-      similarityWeight: similarityWeight,
-      skipPenalty: skipPenalty,
-      tolerance: tolerance,
-      ratio: ratio);
+  var result = _alignPass(
+    ru,
+    uk,
+    ruSets,
+    ukSets,
+    path,
+    corridor,
+    band: band,
+    deviationPenalty: deviationPenalty,
+    similarityWeight: similarityWeight,
+    skipPenalty: skipPenalty,
+    tolerance: tolerance,
+    ratio: ratio,
+  );
   if (coarse != null && polish) {
     // Polish: the block path is only accurate to a few sentences, so run the
     // pass again around its own result with room to move by a few sentences.
     final points = [
       for (final b in result.beads)
-        if (b.ruTo > b.ruFrom && b.ukTo > b.ukFrom) (b.ukFrom, b.ruFrom)
+        if (b.ruTo > b.ruFrom && b.ukTo > b.ukFrom) (b.ukFrom, b.ruFrom),
     ];
     final polished = _pathFromPoints(points, ru.length, uk.length);
     if (polished != null) {
-      result = _alignPass(ru, uk, ruSets, ukSets, polished,
-          _corridor(points, polished.at, n0, m0),
-          band: math.min(band, polishBand),
-          deviationPenalty: deviationPenalty,
-          similarityWeight: similarityWeight,
-          skipPenalty: skipPenalty,
-          tolerance: polishTolerance,
-          ratio: ratio);
+      result = _alignPass(
+        ru,
+        uk,
+        ruSets,
+        ukSets,
+        polished,
+        _corridor(points, polished.at, n0, m0),
+        band: math.min(band, polishBand),
+        deviationPenalty: deviationPenalty,
+        similarityWeight: similarityWeight,
+        skipPenalty: skipPenalty,
+        tolerance: polishTolerance,
+        ratio: ratio,
+      );
     }
   }
   if (!refine) return result;
@@ -106,37 +132,70 @@ AlignmentResult alignSentences(
   for (final b in result.beads) {
     if (b.ruTo == b.ruFrom || b.ukTo == b.ukFrom) continue;
     final sim = stemSimilarity(
-        _union(ruSets, b.ruFrom, b.ruTo), _union(ukSets, b.ukFrom, b.ukTo));
+      _union(ruSets, b.ruFrom, b.ruTo),
+      _union(ukSets, b.ukFrom, b.ukTo),
+    );
     if (sim >= 0.35) points.add((b.ukFrom, b.ruFrom));
   }
   final refined = _pathFromPoints(_dropOutliers(points), ru.length, uk.length);
   if (refined == null) return result;
   path = refined;
-  return _alignPass(ru, uk, ruSets, ukSets, path, _corridor(null, path.at, n0, m0),
-      band: band ~/ 2,
-      deviationPenalty: deviationPenalty * 2,
-      similarityWeight: similarityWeight,
-      skipPenalty: skipPenalty,
-      tolerance: 0,
-      ratio: ratio);
+  return _alignPass(
+    ru,
+    uk,
+    ruSets,
+    ukSets,
+    path,
+    _corridor(null, path.at, n0, m0),
+    band: band ~/ 2,
+    deviationPenalty: deviationPenalty * 2,
+    similarityWeight: similarityWeight,
+    skipPenalty: skipPenalty,
+    tolerance: 0,
+    ratio: ratio,
+  );
 }
 
 /// The expected path from the block-level alignment, kept consistent with the
 /// [manual] anchors; null when the texts are too short for it.
 (
-  ({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast}) path,
+  ({
+    double Function(int) at,
+    int? ruFirst,
+    int? ruLast,
+    int? ukFirst,
+    int? ukLast,
+  })
+  path,
   List<(int q, int r)> points,
-)? _coarsePath(List<String> ru, List<String> uk, List<Set<int>> ruSets,
-        List<Set<int>> ukSets, List<(int ru, int uk)> manual,
-        {required int blockChars, required double match, required double gap}) {
-  final points = coarseAnchors(ruSets, ukSets, [for (final s in ru) s.length],
-      [for (final s in uk) s.length],
-      blockChars: blockChars, matchThreshold: match, gapCost: gap);
+)?
+_coarsePath(
+  List<String> ru,
+  List<String> uk,
+  List<Set<int>> ruSets,
+  List<Set<int>> ukSets,
+  List<(int ru, int uk)> manual, {
+  required int blockChars,
+  required double match,
+  required double gap,
+}) {
+  final points = coarseAnchors(
+    ruSets,
+    ukSets,
+    [for (final s in ru) s.length],
+    [for (final s in uk) s.length],
+    blockChars: blockChars,
+    matchThreshold: match,
+    gapCost: gap,
+  );
   if (points == null || points.length < 3) return null;
   final fixed = [...manual]..sort((a, b) => a.$1.compareTo(b.$1));
   final chain = <(int q, int r)>[
     for (final p in points)
-      if (fixed.every((f) => (p.$2 < f.$1) == (p.$1 < f.$2) && p.$2 != f.$1 && p.$1 != f.$2)) p,
+      if (fixed.every(
+        (f) => (p.$2 < f.$1) == (p.$1 < f.$2) && p.$2 != f.$1 && p.$1 != f.$2,
+      ))
+        p,
     for (final f in fixed) (f.$2, f.$1),
   ]..sort((a, b) => a.$2.compareTo(b.$2));
   // Manual anchors may leave the chain non-monotone on the Ukrainian side.
@@ -162,7 +221,11 @@ Set<int> _union(List<Set<int>> sets, int from, int to) {
 /// (a passage missing from the other) the position inside the stretch is
 /// unknown, so the whole stretch is allowed; elsewhere the path is a line.
 (Int32List, Int32List) _corridor(
-    List<(int q, int r)>? points, double Function(int) at, int n, int m) {
+  List<(int q, int r)>? points,
+  double Function(int) at,
+  int n,
+  int m,
+) {
   final lo = Int32List(n + 1), hi = Int32List(n + 1);
   for (var i = 0; i <= n; i++) {
     lo[i] = hi[i] = at(i).round().clamp(0, m);
@@ -190,10 +253,15 @@ Set<int> _union(List<Set<int>> sets, int from, int to) {
 /// Median Ukrainian-to-Russian length ratio over the stretches between
 /// neighbouring anchor [points]. Stretches where one text lacks a passage
 /// would skew an overall ratio, the median ignores them.
-double _lengthRatio(List<String> ru, List<String> uk, List<(int q, int r)> points) {
+double _lengthRatio(
+  List<String> ru,
+  List<String> uk,
+  List<(int q, int r)> points,
+) {
   final ratios = <double>[];
   for (var k = 1; k < points.length; k++) {
-    final dq = points[k].$1 - points[k - 1].$1, dr = points[k].$2 - points[k - 1].$2;
+    final dq = points[k].$1 - points[k - 1].$1,
+        dr = points[k].$2 - points[k - 1].$2;
     if (dq <= 0 || dr <= 0 || dr > 40 || dq > 40) continue;
     var u = 0, r = 0;
     for (var j = points[k - 1].$1; j < points[k].$1; j++) {
@@ -216,7 +284,11 @@ List<(int, int)> _dropOutliers(List<(int q, int r)> pts) {
   const half = 8;
   for (var i = 0; i < pts.length; i++) {
     final diffs = <int>[];
-    for (var k = math.max(0, i - half); k < math.min(pts.length, i + half + 1); k++) {
+    for (
+      var k = math.max(0, i - half);
+      k < math.min(pts.length, i + half + 1);
+      k++
+    ) {
       diffs.add(pts[k].$1 - pts[k].$2);
     }
     diffs.sort();
@@ -231,7 +303,14 @@ AlignmentResult _alignPass(
   List<String> uk,
   List<Set<int>> ruSets,
   List<Set<int>> ukSets,
-  ({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast}) path,
+  ({
+    double Function(int) at,
+    int? ruFirst,
+    int? ruLast,
+    int? ukFirst,
+    int? ukLast,
+  })
+  path,
   (Int32List lo, Int32List hi) corridor, {
   required int band,
   required double deviationPenalty,
@@ -303,13 +382,18 @@ AlignmentResult _alignPass(
         }
         // A sentence with no counterpart costs a flat amount: the length model
         // would make a long missing passage unaffordable.
-        var total = prev +
+        var total =
+            prev +
             penalty[t] +
             (t == 1 || t == 2 ? 0 : _lengthCost(l1, l2, c)) +
             deviationPenalty *
-                math.max(0, math.max(cLo[i] - tolerance - j, j - cHi[i] - tolerance));
+                math.max(
+                  0,
+                  math.max(cLo[i] - tolerance - j, j - cHi[i] - tolerance),
+                );
         if (di > 0 && dj > 0 && similarityWeight > 0) {
-          total -= similarityWeight *
+          total -=
+              similarityWeight *
               stemSimilarity(_union(ruSets, pi, i), _union(ukSets, pj, j));
         }
         if (total < best) {
@@ -374,7 +458,9 @@ double _normalCdf(double x) {
   const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
   final z = x.abs() / math.sqrt2;
   final t = 1 / (1 + p * z);
-  final y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * math.exp(-z * z);
+  final y =
+      1 -
+      (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * math.exp(-z * z);
   return 0.5 * (1 + (x < 0 ? -y : y));
 }
 
@@ -382,9 +468,19 @@ double _normalCdf(double x) {
 /// Ukrainian index, built from a monotone chain of confident anchors.
 /// [manual] pairs `(ruIndex, ukIndex)` are trusted absolutely: automatic
 /// anchors that contradict them are discarded.
-({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast})
-    _expectedPath(List<Set<int>> ru, List<Set<int>> uk, int window,
-        List<(int ru, int uk)> manual) {
+({
+  double Function(int) at,
+  int? ruFirst,
+  int? ruLast,
+  int? ukFirst,
+  int? ukLast,
+})
+_expectedPath(
+  List<Set<int>> ru,
+  List<Set<int>> uk,
+  int window,
+  List<(int ru, int uk)> manual,
+) {
   final m = uk.length, n = ru.length;
   final k = math.min(window, m);
   final index = <int, List<int>>{};
@@ -432,7 +528,9 @@ double _normalCdf(double x) {
   final fixed = [...manual]..sort((a, b) => a.$1.compareTo(b.$1));
   bool consistent((int q, int r, int votes) a) {
     for (final f in fixed) {
-      if ((a.$2 < f.$1) != (a.$1 < f.$2) && (a.$2 != f.$1 || a.$1 != f.$2)) return false;
+      if ((a.$2 < f.$1) != (a.$1 < f.$2) && (a.$2 != f.$1 || a.$1 != f.$2)) {
+        return false;
+      }
     }
     return true;
   }
@@ -467,27 +565,42 @@ double _normalCdf(double x) {
     chain.add((anchors[a].$1, anchors[a].$2));
   }
   final points = chain.reversed.toList();
-  return _pathFromPoints(points, n, m) ?? (
-    at: (int i) => i * m / math.max(n, 1),
-    ruFirst: null, ruLast: null, ukFirst: null, ukLast: null,
-  );
+  return _pathFromPoints(points, n, m) ??
+      (
+        at: (int i) => i * m / math.max(n, 1),
+        ruFirst: null,
+        ruLast: null,
+        ukFirst: null,
+        ukLast: null,
+      );
 }
 
 /// Piecewise-linear path through `(ukIndex, ruIndex)` [points]; null when
 /// there are none.
-({double Function(int) at, int? ruFirst, int? ruLast, int? ukFirst, int? ukLast})?
-    _pathFromPoints(List<(int q, int r)> points, int n, int m) {
+({
+  double Function(int) at,
+  int? ruFirst,
+  int? ruLast,
+  int? ukFirst,
+  int? ukLast,
+})?
+_pathFromPoints(List<(int q, int r)> points, int n, int m) {
   if (points.isEmpty) return null;
   double slope;
   if (points.length >= 2) {
-    slope = (points.last.$1 - points.first.$1) /
+    slope =
+        (points.last.$1 - points.first.$1) /
         math.max(points.last.$2 - points.first.$2, 1);
   } else {
     slope = m / math.max(n, 1);
   }
   double at(int i) {
-    if (i <= points.first.$2) return points.first.$1 + (i - points.first.$2) * slope;
-    if (i >= points.last.$2) return points.last.$1 + (i - points.last.$2) * slope;
+    if (i <= points.first.$2) {
+      return points.first.$1 + (i - points.first.$2) * slope;
+    }
+    if (i >= points.last.$2) {
+      return points.last.$1 + (i - points.last.$2) * slope;
+    }
     var lo = 0, hi = points.length - 1;
     while (hi - lo > 1) {
       final mid = (lo + hi) >> 1;

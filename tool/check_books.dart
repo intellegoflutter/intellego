@@ -6,13 +6,16 @@ import 'dart:io';
 import 'package:intellego/data/book.dart';
 
 void main(List<String> a) {
-  for (final f in Directory(a[0]).listSync().whereType<File>().where((f) => f.path.endsWith('.json'))) {
+  for (final f in Directory(
+    a[0],
+  ).listSync().whereType<File>().where((f) => f.path.endsWith('.json'))) {
     final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
     final book = Book.fromJson(raw);
     var checked = 0, bad = 0;
     final legacy = raw['audio'] as Map<String, dynamic>?;
     if (legacy != null && raw['audioTracks'] == null) {
-      final sentences = (legacy['sentences'] as List).cast<Map<String, dynamic>>();
+      final sentences = (legacy['sentences'] as List)
+          .cast<Map<String, dynamic>>();
       final rawS = (raw['sentences'] as List).cast<Map<String, dynamic>>();
       for (var i = 0; i < rawS.length; i++) {
         final from = rawS[i]['ukFrom'] as int?, to = rawS[i]['ukTo'] as int?;
@@ -23,12 +26,19 @@ void main(List<String> a) {
         if (book.trackTextFor(i) != expected) bad++;
       }
     }
-    final again = Book.fromJson(jsonDecode(jsonEncode(book.toJson())) as Map<String, dynamic>);
-    final same = again.tracks.length == book.tracks.length &&
-        List.generate(book.sentences.length, (i) => again.trackTextFor(i) == book.trackTextFor(i))
-            .every((x) => x);
-    print('${f.path.split('/').last}: ${book.sentences.length} sentences, '
-        '${book.tracks.length} tracks, legacy mismatches $bad/$checked, round trip ok=$same, '
-        'json ${f.lengthSync() ~/ 1024} KB -> ${jsonEncode(book.toJson()).length ~/ 1024} KB');
+    final again = Book.fromJson(
+      jsonDecode(jsonEncode(book.toJson())) as Map<String, dynamic>,
+    );
+    final same =
+        again.tracks.length == book.tracks.length &&
+        List.generate(
+          book.sentences.length,
+          (i) => again.trackTextFor(i) == book.trackTextFor(i),
+        ).every((x) => x);
+    print(
+      '${f.path.split('/').last}: ${book.sentences.length} sentences, '
+      '${book.tracks.length} tracks, legacy mismatches $bad/$checked, round trip ok=$same, '
+      'json ${f.lengthSync() ~/ 1024} KB -> ${jsonEncode(book.toJson()).length ~/ 1024} KB',
+    );
   }
 }

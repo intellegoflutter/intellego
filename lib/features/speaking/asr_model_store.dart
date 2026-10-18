@@ -16,8 +16,11 @@ class AsrModelFile {
 /// Downloads the Russian GigaAM speech recognition model (NeMo CTC, int8,
 /// from the sherpa-onnx releases, see NOTICE) on first use.
 class AsrModelStore {
-  AsrModelStore({http.Client? client, this._root, this.baseUrl = defaultAsrBaseUrl})
-      : _client = client ?? http.Client();
+  AsrModelStore({
+    http.Client? client,
+    this._root,
+    this.baseUrl = defaultAsrBaseUrl,
+  }) : _client = client ?? http.Client();
 
   final http.Client _client;
   final String baseUrl;
@@ -30,8 +33,9 @@ class AsrModelStore {
 
   static int get totalBytes => files.fold(0, (n, f) => n + f.bytes);
 
-  Future<Directory> get dir async => _root ??=
-      Directory('${(await getApplicationSupportDirectory()).path}/models/asr');
+  Future<Directory> get dir async => _root ??= Directory(
+    '${(await getApplicationSupportDirectory()).path}/models/asr',
+  );
 
   Future<bool> isInstalled() async {
     final d = await dir;
@@ -55,7 +59,9 @@ class AsrModelStore {
         continue;
       }
       final tmp = File('${target.path}.part');
-      final response = await _client.send(http.Request('GET', Uri.parse('$baseUrl/${f.name}')));
+      final response = await _client.send(
+        http.Request('GET', Uri.parse('$baseUrl/${f.name}')),
+      );
       if (response.statusCode != 200) {
         throw HttpException('HTTP ${response.statusCode} for ${f.name}');
       }
@@ -72,7 +78,9 @@ class AsrModelStore {
       }
       if (received != f.bytes) {
         await tmp.delete();
-        throw HttpException('Incomplete download of ${f.name}: $received of ${f.bytes} bytes');
+        throw HttpException(
+          'Incomplete download of ${f.name}: $received of ${f.bytes} bytes',
+        );
       }
       await tmp.rename(target.path);
       done += f.bytes;

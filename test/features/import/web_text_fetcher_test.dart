@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -20,11 +21,11 @@ const _page = '''
 ''';
 
 List<int> _encodeCp1251(String s) => s.runes.map((r) {
-      if (r < 0x80) return r;
-      if (r == 0x0401) return 0xA8;
-      if (r == 0x0451) return 0xB8;
-      return 0xC0 + (r - 0x0410);
-    }).toList();
+  if (r < 0x80) return r;
+  if (r == 0x0401) return 0xA8;
+  if (r == 0x0451) return 0xB8;
+  return 0xC0 + (r - 0x0410);
+}).toList();
 
 void main() {
   test('extractor keeps main paragraphs, drops chrome', () {
@@ -41,9 +42,13 @@ void main() {
   });
 
   test('fetcher decodes utf-8', () async {
-    final client = MockClient((_) async => http.Response.bytes(
-        utf8.encode(_page), 200,
-        headers: {'content-type': 'text/html; charset=utf-8'}));
+    final client = MockClient(
+      (_) async => http.Response.bytes(
+        utf8.encode(_page),
+        200,
+        headers: {'content-type': 'text/html; charset=utf-8'},
+      ),
+    );
     final r = await WebTextFetcher(client: client)
         .fetch(Uri.parse('https://example.com/b'));
     expect(r.paragraphs, hasLength(2));
@@ -51,9 +56,15 @@ void main() {
 
   test('fetcher decodes windows-1251 from header', () async {
     final body = _encodeCp1251(
-        '<html><body><p>Ёлка стоит в углу комнаты и ждёт праздника.</p></body></html>');
-    final client = MockClient((_) async => http.Response.bytes(body, 200,
-        headers: {'content-type': 'text/html; charset=windows-1251'}));
+      '<html><body><p>Ёлка стоит в углу комнаты и ждёт праздника.</p></body></html>',
+    );
+    final client = MockClient(
+      (_) async => http.Response.bytes(
+        body,
+        200,
+        headers: {'content-type': 'text/html; charset=windows-1251'},
+      ),
+    );
     final r = await WebTextFetcher(client: client)
         .fetch(Uri.parse('https://example.com/b'));
     expect(r.paragraphs.single, startsWith('Ёлка стоит'));
@@ -61,9 +72,13 @@ void main() {
 
   test('fetcher errors', () async {
     final notFound = MockClient((_) async => http.Response('', 404));
-    expect(() => WebTextFetcher(client: notFound).fetch(Uri.parse('https://a.b')),
-        throwsA(isA<FetchException>()));
-    expect(() => WebTextFetcher(client: notFound).fetch(Uri.parse('ftp://a.b')),
-        throwsA(isA<FetchException>()));
+    expect(
+      () => WebTextFetcher(client: notFound).fetch(Uri.parse('https://a.b')),
+      throwsA(isA<FetchException>()),
+    );
+    expect(
+      () => WebTextFetcher(client: notFound).fetch(Uri.parse('ftp://a.b')),
+      throwsA(isA<FetchException>()),
+    );
   });
 }

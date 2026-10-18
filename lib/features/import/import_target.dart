@@ -33,7 +33,10 @@ ImportTarget? parseImportInput(String input, {required Uri site}) {
   final bookId = LoveReadSource.bookId(uri);
   if (bookId != null) {
     return LoveReadTarget(
-        LoveReadSource.siteOf(uri), bookId, LoveReadSource.startPage(uri));
+      LoveReadSource.siteOf(uri),
+      bookId,
+      LoveReadSource.startPage(uri),
+    );
   }
   return WebPageTarget(uri);
 }
@@ -51,4 +54,5 @@ String _withScheme(String text, Uri site) {
 }
 
 /// What the input field starts with so only the id has to be typed.
-String inputPrefix(Uri site) => '$site/read_book.php?id='.replaceFirst('//read', '/read');
+String inputPrefix(Uri site) =>
+    '$site/read_book.php?id='.replaceFirst('//read', '/read');

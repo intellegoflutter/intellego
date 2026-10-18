@@ -11,8 +11,12 @@ void main() {
     tmp = await Directory.systemTemp.createTemp('stress');
     // blocks of 2 lines
     const lines = [
-      ['аист', 0], ['банан', 3], ['вода', 3],
-      ['город', 0], ['дом', 0], ['ёж', 0],
+      ['аист', 0],
+      ['банан', 3],
+      ['вода', 3],
+      ['город', 0],
+      ['дом', 0],
+      ['ёж', 0],
       ['жизнь', 0],
     ];
     final dat = StringBuffer();

@@ -6,25 +6,27 @@ import 'package:intellego/features/nlp/accent/stress_dictionary.dart';
 const _m = stressMark;
 
 DictionaryAccentuator _make() => DictionaryAccentuator(
-      stress: const MapStressDictionary({
-        'мама': 1,
-        'молоко': 5,
-        'замок': 1, // also an omograph: must stay unmarked
-        'кто-нибудь': 5,
-        'книга': 2,
-        'ёлка': 0,
-      }),
-      yoWords: {'елка': 'ёлка', 'мед': 'мёд'},
-      omographs: {'замок'},
-      yoHomographs: {'все'},
-    );
+  stress: const MapStressDictionary({
+    'мама': 1,
+    'молоко': 5,
+    'замок': 1, // also an omograph: must stay unmarked
+    'кто-нибудь': 5,
+    'книга': 2,
+    'ёлка': 0,
+  }),
+  yoWords: {'елка': 'ёлка', 'мед': 'мёд'},
+  omographs: {'замок'},
+  yoHomographs: {'все'},
+);
 
 void main() {
   final acc = _make();
 
   test('adds stress mark after the stressed vowel', () async {
-    expect(await acc.accent('Мама купила молоко.'),
-        'Ма$_mма купила молоко$_m.');
+    expect(
+      await acc.accent('Мама купила молоко.'),
+      'Ма$_mма купила молоко$_m.',
+    );
   });
 
   test('keeps capitalization and punctuation', () async {

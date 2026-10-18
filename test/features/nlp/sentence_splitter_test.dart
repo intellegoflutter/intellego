@@ -7,44 +7,66 @@ List<String> split(String s) =>
 void main() {
   portugueseTests();
   test('basic sentences', () {
-    expect(split('Он пришёл домой. Она ждала! Кто там? Никто.'),
-        ['Он пришёл домой.', 'Она ждала!', 'Кто там?', 'Никто.']);
+    expect(split('Он пришёл домой. Она ждала! Кто там? Никто.'), [
+      'Он пришёл домой.',
+      'Она ждала!',
+      'Кто там?',
+      'Никто.',
+    ]);
   });
 
   test('initials and title abbreviations do not split', () {
-    expect(split('А. С. Пушкин родился в 1799 г. в Москве. Он был поэтом.'),
-        ['А. С. Пушкин родился в 1799 г. в Москве.', 'Он был поэтом.']);
-    expect(split('Мы жили на ул. Ленина. Дом был старый.'),
-        ['Мы жили на ул. Ленина.', 'Дом был старый.']);
+    expect(split('А. С. Пушкин родился в 1799 г. в Москве. Он был поэтом.'), [
+      'А. С. Пушкин родился в 1799 г. в Москве.',
+      'Он был поэтом.',
+    ]);
+    expect(split('Мы жили на ул. Ленина. Дом был старый.'), [
+      'Мы жили на ул. Ленина.',
+      'Дом был старый.',
+    ]);
   });
 
   test('terminal abbreviation splits before capital letter', () {
-    expect(split('Там были яблоки, груши и т. д. Потом мы ушли.'),
-        ['Там были яблоки, груши и т. д.', 'Потом мы ушли.']);
-    expect(split('Там были яблоки, груши и т.д. и мы ели.'),
-        ['Там были яблоки, груши и т.д. и мы ели.']);
+    expect(split('Там были яблоки, груши и т. д. Потом мы ушли.'), [
+      'Там были яблоки, груши и т. д.',
+      'Потом мы ушли.',
+    ]);
+    expect(split('Там были яблоки, груши и т.д. и мы ели.'), [
+      'Там были яблоки, груши и т.д. и мы ели.',
+    ]);
   });
 
   test('quotes and brackets stay with their sentence', () {
-    expect(split('Он сказал: «Иду домой.» Потом вышел.'),
-        ['Он сказал: «Иду домой.»', 'Потом вышел.']);
-    expect(split('Она закричала: «Стой!» Он остановился.'),
-        ['Она закричала: «Стой!»', 'Он остановился.']);
+    expect(split('Он сказал: «Иду домой.» Потом вышел.'), [
+      'Он сказал: «Иду домой.»',
+      'Потом вышел.',
+    ]);
+    expect(split('Она закричала: «Стой!» Он остановился.'), [
+      'Она закричала: «Стой!»',
+      'Он остановился.',
+    ]);
   });
 
   test('ellipsis only splits before a capital', () {
-    expect(split('Я думал… и решил уйти. Но остался…  Потом пришла она.'),
-        ['Я думал… и решил уйти.', 'Но остался…', 'Потом пришла она.']);
+    expect(split('Я думал… и решил уйти. Но остался…  Потом пришла она.'), [
+      'Я думал… и решил уйти.',
+      'Но остался…',
+      'Потом пришла она.',
+    ]);
   });
 
   test('dialogue dashes', () {
-    expect(split('— Привет, — сказал он. — Как дела?'),
-        ['— Привет, — сказал он.', '— Как дела?']);
+    expect(split('— Привет, — сказал он. — Как дела?'), [
+      '— Привет, — сказал он.',
+      '— Как дела?',
+    ]);
   });
 
   test('decimals and numbers', () {
-    expect(split('Это стоит 3.5 рубля. Дорого.'),
-        ['Это стоит 3.5 рубля.', 'Дорого.']);
+    expect(split('Это стоит 3.5 рубля. Дорого.'), [
+      'Это стоит 3.5 рубля.',
+      'Дорого.',
+    ]);
   });
 
   test('paragraphs always split and carry an index', () {
@@ -63,13 +85,19 @@ void portugueseTests() {
     final pt = SentenceSplitter.forLanguage('pt-BR');
 
     test('Portuguese titles do not end a sentence', () {
-      expect(pt.split('O Sr. Silva chegou. A Dra. Maria saiu.').map((s) => s.text),
-          ['O Sr. Silva chegou.', 'A Dra. Maria saiu.']);
+      expect(
+        pt.split('O Sr. Silva chegou. A Dra. Maria saiu.').map((s) => s.text),
+        ['O Sr. Silva chegou.', 'A Dra. Maria saiu.'],
+      );
     });
 
     test('Portuguese dialogue and questions', () {
-      expect(pt.split('Ela perguntou: — Quem é? Ninguém respondeu. Então partiu!').map((s) => s.text),
-          ['Ela perguntou: — Quem é?', 'Ninguém respondeu.', 'Então partiu!']);
+      expect(
+        pt
+            .split('Ela perguntou: — Quem é? Ninguém respondeu. Então partiu!')
+            .map((s) => s.text),
+        ['Ela perguntou: — Quem é?', 'Ninguém respondeu.', 'Então partiu!'],
+      );
     });
 
     test('Russian titles are not special in Portuguese, Portuguese ones not in Russian', () {
@@ -78,10 +106,18 @@ void portugueseTests() {
     });
 
     test('Ukrainian and English lists', () {
-      expect(SentenceSplitter.forLanguage('uk').split('Вул. Шевченка була пуста. Він пішов.').map((s) => s.text),
-          ['Вул. Шевченка була пуста.', 'Він пішов.']);
-      expect(SentenceSplitter.forLanguage('en').split('Dr. Smith left. He was tired.').map((s) => s.text),
-          ['Dr. Smith left.', 'He was tired.']);
+      expect(
+        SentenceSplitter.forLanguage('uk')
+            .split('Вул. Шевченка була пуста. Він пішов.')
+            .map((s) => s.text),
+        ['Вул. Шевченка була пуста.', 'Він пішов.'],
+      );
+      expect(
+        SentenceSplitter.forLanguage('en')
+            .split('Dr. Smith left. He was tired.')
+            .map((s) => s.text),
+        ['Dr. Smith left.', 'He was tired.'],
+      );
       expect(SentenceSplitter.forLanguage('xx').split('Eins. Zwei.').length, 2);
     });
   });

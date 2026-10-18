@@ -28,7 +28,9 @@ class AccentData {
 /// Copies the bundled stress file to app storage once (assets are not
 /// randomly accessible on Android) and loads the other tables.
 Future<AccentData> loadAccentData() async {
-  final dir = Directory('${(await getApplicationSupportDirectory()).path}/dict');
+  final dir = Directory(
+    '${(await getApplicationSupportDirectory()).path}/dict',
+  );
   await dir.create(recursive: true);
   final dat = File('${dir.path}/stress.dat');
   final stamp = File('${dir.path}/version');
@@ -36,21 +38,26 @@ Future<AccentData> loadAccentData() async {
   if (!await dat.exists() || current != '$_dictVersion') {
     final data = await rootBundle.load('$_assetDir/stress.dat');
     await dat.writeAsBytes(
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        flush: true);
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      flush: true,
+    );
     await stamp.writeAsString('$_dictVersion');
   }
 
-  Future<Map<String, dynamic>> table(String name) async => jsonDecode(
-      await rootBundle.loadString('$_assetDir/$name.json')) as Map<String, dynamic>;
+  Future<Map<String, dynamic>> table(String name) async =>
+      jsonDecode(await rootBundle.loadString('$_assetDir/$name.json'))
+          as Map<String, dynamic>;
 
   final omographs = await table('omographs');
   return AccentData(
     stress: FileStressDictionary(
-        dat, await rootBundle.loadString('$_assetDir/stress.idx')),
+      dat,
+      await rootBundle.loadString('$_assetDir/stress.idx'),
+    ),
     yoWords: (await table('yo_words')).cast<String, String>(),
     omographs: {
-      for (final e in omographs.entries) e.key: (e.value as List).cast<String>()
+      for (final e in omographs.entries)
+        e.key: (e.value as List).cast<String>(),
     },
     yoHomographs: (await table('yo_homographs')).cast<String, String>(),
   );

@@ -7,8 +7,11 @@ import 'caption_models.dart';
 /// sentence boundary is mapped back to a time inside its cue (interpolated by
 /// character position). Auto-generated cues overlap, so a cue is considered
 /// to end when the next one starts.
-List<TimedText> cuesToSentences(List<Cue> cues,
-    {int maxSentenceChars = 320, String language = 'uk'}) {
+List<TimedText> cuesToSentences(
+  List<Cue> cues, {
+  int maxSentenceChars = 320,
+  String language = 'uk',
+}) {
   final sorted = [...cues]..sort((a, b) => a.startMs.compareTo(b.startMs));
   final text = StringBuffer();
   final cueStart = <int>[]; // char offset of each cue in [text]
@@ -62,10 +65,13 @@ List<TimedText> cuesToSentences(List<Cue> cues,
     final end = start + s.text.length;
     pos = end;
     if (s.text.length <= maxSentenceChars) {
-      result.add(TimedText(
+      result.add(
+        TimedText(
           text: s.text,
           startMs: timeAt(start, end: false),
-          endMs: timeAt(end, end: true)));
+          endMs: timeAt(end, end: true),
+        ),
+      );
       continue;
     }
     // Unpunctuated stretch: cut at cue boundaries.
@@ -74,20 +80,28 @@ List<TimedText> cuesToSentences(List<Cue> cues,
       final boundary = cueStart[i];
       final last = i == cueAt(end - 1);
       if (boundary - chunkStart >= maxSentenceChars ~/ 2 || last) {
-        final cut = last && end - boundary < maxSentenceChars ~/ 4 ? end : boundary;
+        final cut = last && end - boundary < maxSentenceChars ~/ 4
+            ? end
+            : boundary;
         if (cut <= chunkStart) continue;
-        result.add(TimedText(
+        result.add(
+          TimedText(
             text: full.substring(chunkStart, cut).trim(),
             startMs: timeAt(chunkStart, end: false),
-            endMs: timeAt(cut, end: true)));
+            endMs: timeAt(cut, end: true),
+          ),
+        );
         chunkStart = cut;
       }
     }
     if (chunkStart < end) {
-      result.add(TimedText(
+      result.add(
+        TimedText(
           text: full.substring(chunkStart, end).trim(),
           startMs: timeAt(chunkStart, end: false),
-          endMs: timeAt(end, end: true)));
+          endMs: timeAt(end, end: true),
+        ),
+      );
     }
   }
   return result;

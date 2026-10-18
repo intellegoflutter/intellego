@@ -7,11 +7,8 @@ class IntellegoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Intellego',
-        theme: ThemeData(
-          colorSchemeSeed: Colors.indigo,
-          useMaterial3: true,
-        ),
-        home: const LibraryScreen(),
-      );
+    title: 'Intellego',
+    theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+    home: const LibraryScreen(),
+  );
 }

@@ -55,11 +55,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   }
 
   void _onProcess(int done, int total) => setState(() {
-        _status = _accent
-            ? 'Adding stress marks… sentence $done of $total'
-            : 'Splitting into sentences… $done of $total';
-        _progress = done / total;
-      });
+    _status = _accent
+        ? 'Adding stress marks… sentence $done of $total'
+        : 'Splitting into sentences… $done of $total';
+    _progress = done / total;
+  });
 
   @override
   void dispose() {
@@ -70,7 +70,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Future<void> _import() async {
     final target = parseImportInput(_url.text, site: _site);
-    if (target == null || (target is LoveReadTarget && _url.text.trim() == inputPrefix(_site))) {
+    if (target == null ||
+        (target is LoveReadTarget && _url.text.trim() == inputPrefix(_site))) {
       setState(() => _error = 'Enter a book URL or id');
       return;
     }
@@ -95,14 +96,19 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           final store = ref.read(modelStoreProvider);
           if (!await store.isInstalled(defaultOmographSize)) {
             setState(() => _status = 'Downloading language models…');
-            await store.install(defaultOmographSize,
-                onProgress: (p) => setState(() => _progress = p));
+            await store.install(
+              defaultOmographSize,
+              onProgress: (p) => setState(() => _progress = p),
+            );
             setState(() => _progress = null);
           }
           setState(() => _status = 'Loading language models…');
           accentuator = await ref.read(onnxAccentuatorProvider.future);
         } else {
-          setState(() => _status = 'Loading stress dictionary (first time takes a moment)…');
+          setState(
+            () => _status =
+                'Loading stress dictionary (first time takes a moment)…',
+          );
           accentuator = await ref.read(accentuatorProvider.future);
         }
       }
@@ -113,19 +119,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       final service = ref.read(importServiceProvider);
       final book = switch (target) {
         LoveReadTarget t => await service.importLoveRead(
-            t.site,
-            t.bookId,
-            firstPage: t.firstPage,
-            pageCount: pageCount,
-            accentuator: accentuator,
-            onFetchProgress: (done, total) => setState(() {
-              _status = 'Downloading page $done of $total…';
-              _progress = done / total;
-            }),
-            onProcessProgress: _onProcess,
-          ),
-        WebPageTarget t => await service.importUrl(t.url,
-            accentuator: accentuator, onProcessProgress: _onProcess),
+          t.site,
+          t.bookId,
+          firstPage: t.firstPage,
+          pageCount: pageCount,
+          accentuator: accentuator,
+          onFetchProgress: (done, total) => setState(() {
+            _status = 'Downloading page $done of $total…';
+            _progress = done / total;
+          }),
+          onProcessProgress: _onProcess,
+        ),
+        WebPageTarget t => await service.importUrl(
+          t.url,
+          accentuator: accentuator,
+          onProcessProgress: _onProcess,
+        ),
       };
       setState(() {
         _status = 'Saving…';
@@ -135,8 +144,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        messenger.showSnackBar(SnackBar(
-            content: Text('Imported “${book.title}”: ${book.sentences.length} sentences.')));
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported “${book.title}”: ${book.sentences.length} sentences.',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -147,71 +161,79 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Import text')),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            TextField(
-              controller: _url,
-              enabled: !_busy,
-              keyboardType: TextInputType.url,
-              textCapitalization: TextCapitalization.none,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: const InputDecoration(
-                labelText: 'Book URL or id',
-                helperText: 'Paste a loveread link; the site is remembered. '
-                    'Other web pages work too.',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => _import(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pages,
-              enabled: !_busy,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Number of pages (empty = to the end)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Add stress marks and ё'),
-              subtitle: const Text('Helps beginners read correctly'),
-              value: _accent,
-              onChanged: _busy ? null : (v) => setState(() => _accent = v),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Resolve ambiguous words by context'),
-              subtitle: Text(
-                  'Neural models, e.g. за́мок vs замо́к. One-time download of '
-                  '~${(ModelStore.totalBytes(defaultOmographSize) / 1e6).round()} MB'),
-              value: _neural && _accent,
-              onChanged: _busy || !_accent ? null : (v) => setState(() => _neural = v),
-            ),
-            const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _busy ? null : _import,
-              child: const Text('Import'),
-            ),
-            if (_busy) ...[
-              const SizedBox(height: 16),
-              LinearProgressIndicator(value: _progress),
-              if (_status != null)
-                Padding(
-                    padding: const EdgeInsets.only(top: 8), child: Text(_status!)),
-            ],
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Text(_error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              ),
-          ],
+    appBar: AppBar(title: const Text('Import text')),
+    body: ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        TextField(
+          controller: _url,
+          enabled: !_busy,
+          keyboardType: TextInputType.url,
+          textCapitalization: TextCapitalization.none,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: const InputDecoration(
+            labelText: 'Book URL or id',
+            helperText:
+                'Paste a loveread link; the site is remembered. '
+                'Other web pages work too.',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (_) => _import(),
         ),
-      );
+        const SizedBox(height: 12),
+        TextField(
+          controller: _pages,
+          enabled: !_busy,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Number of pages (empty = to the end)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Add stress marks and ё'),
+          subtitle: const Text('Helps beginners read correctly'),
+          value: _accent,
+          onChanged: _busy ? null : (v) => setState(() => _accent = v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Resolve ambiguous words by context'),
+          subtitle: Text(
+            'Neural models, e.g. за́мок vs замо́к. One-time download of '
+            '~${(ModelStore.totalBytes(defaultOmographSize) / 1e6).round()} MB',
+          ),
+          value: _neural && _accent,
+          onChanged: _busy || !_accent
+              ? null
+              : (v) => setState(() => _neural = v),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: _busy ? null : _import,
+          child: const Text('Import'),
+        ),
+        if (_busy) ...[
+          const SizedBox(height: 16),
+          LinearProgressIndicator(value: _progress),
+          if (_status != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_status!),
+            ),
+        ],
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+      ],
+    ),
+  );
 }

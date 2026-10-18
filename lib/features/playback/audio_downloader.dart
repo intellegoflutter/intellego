@@ -23,7 +23,11 @@ double? parseYtDlpProgress(String line) {
 /// True when a yt-dlp version string (`2025.10.22`) is at least [minimum].
 bool ytDlpIsRecent(String version, {String minimum = '2025.10.01'}) {
   List<int> parts(String v) =>
-      RegExp(r'\d+').allMatches(v).map((m) => int.parse(m.group(0)!)).take(3).toList();
+      RegExp(r'\d+')
+          .allMatches(v)
+          .map((m) => int.parse(m.group(0)!))
+          .take(3)
+          .toList();
   final a = parts(version), b = parts(minimum);
   for (var i = 0; i < 3; i++) {
     final x = i < a.length ? a[i] : 0, y = i < b.length ? b[i] : 0;
@@ -67,21 +71,29 @@ class YtDlpDownloader {
   }
 
   /// Downloads the audio of [videoId] into the store.
-  Future<File> download(String videoId, {void Function(double)? onProgress}) async {
+  Future<File> download(
+    String videoId, {
+    void Function(double)? onProgress,
+  }) async {
     final cmd = await _locate();
     if (cmd == null) {
       throw DownloadException(
-          'A recent yt-dlp is required (version 2025.10 or newer). '
-          'Install or update it with: pipx install -U yt-dlp  (or: uv tool install yt-dlp). '
-          'Alternatively pick an audio file you downloaded yourself.');
+        'A recent yt-dlp is required (version 2025.10 or newer). '
+        'Install or update it with: pipx install -U yt-dlp  (or: uv tool install yt-dlp). '
+        'Alternatively pick an audio file you downloaded yourself.',
+      );
     }
     final runtime = await _has('node') ? ['--js-runtimes', 'node'] : <String>[];
     final prefix = await _store.targetPrefix(videoId);
     final process = await Process.start(cmd.first, [
       ...cmd.skip(1),
-      '-f', '139/140/bestaudio[ext=m4a]/bestaudio',
-      '--no-playlist', '--newline', ...runtime,
-      '-o', '$prefix.%(ext)s',
+      '-f',
+      '139/140/bestaudio[ext=m4a]/bestaudio',
+      '--no-playlist',
+      '--newline',
+      ...runtime,
+      '-o',
+      '$prefix.%(ext)s',
       'https://www.youtube.com/watch?v=$videoId',
     ]);
     final errors = <String>[];
@@ -89,9 +101,9 @@ class YtDlpDownloader {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((l) {
-      final p = parseYtDlpProgress(l);
-      if (p != null) onProgress?.call(p);
-    });
+          final p = parseYtDlpProgress(l);
+          if (p != null) onProgress?.call(p);
+        });
     process.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
@@ -101,7 +113,8 @@ class YtDlpDownloader {
     if (code != 0 || file == null) {
       final tail = errors.where((e) => e.contains('ERROR')).take(2).join('\n');
       throw DownloadException(
-          'Download failed${tail.isEmpty ? ' (yt-dlp exit code $code)' : ': $tail'}');
+        'Download failed${tail.isEmpty ? ' (yt-dlp exit code $code)' : ': $tail'}',
+      );
     }
     return file;
   }

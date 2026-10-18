@@ -14,20 +14,25 @@ void main() {
 
   final nnDir = Platform.environment['INTELLEGO_NN_DIR'] ?? '';
   final golden = jsonDecode(
-      File('${Directory.current.path}/test/fixtures/ruaccent_golden.json')
-          .readAsStringSync()) as List;
+    File('${Directory.current.path}/test/fixtures/ruaccent_golden.json')
+        .readAsStringSync(),
+  ) as List;
 
   /// Python marks "+" before a vowel; convert to U+0301 after it and drop
   /// marks that the app intentionally omits (ё, one-syllable words).
   String normalize(String py) {
     const vowels = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ';
     final replaced = py.replaceAllMapped(
-        RegExp('\\+([$vowels])'), (m) => '${m[1]}$stressMark');
+      RegExp('\\+([$vowels])'),
+      (m) => '${m[1]}$stressMark',
+    );
     return replaced
         .split(RegExp(r'(?<=\s)|(?=\s)'))
-        .map((w) => w.split('').where(vowels.contains).length < 2
-            ? w.replaceAll(stressMark, '')
-            : w)
+        .map(
+          (w) => w.split('').where(vowels.contains).length < 2
+              ? w.replaceAll(stressMark, '')
+              : w,
+        )
         .join()
         .replaceAll('ё$stressMark', 'ё')
         .replaceAll('Ё$stressMark', 'Ё');

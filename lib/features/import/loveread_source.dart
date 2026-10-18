@@ -41,7 +41,10 @@ class LoveReadBook {
 /// Only `<p class=MsoNormal>` paragraphs are kept; headings, images and
 /// navigation are dropped.
 class LoveReadSource {
-  LoveReadSource(this._fetcher, {this.pageDelay = const Duration(milliseconds: 250)});
+  LoveReadSource(
+    this._fetcher, {
+    this.pageDelay = const Duration(milliseconds: 250),
+  });
 
   final WebTextFetcher _fetcher;
   final Duration pageDelay;
@@ -57,16 +60,19 @@ class LoveReadSource {
       int.tryParse(url.queryParameters['p'] ?? '') ?? 1;
 
   static Uri pageUrl(Uri site, int id, int page) => Uri(
-        scheme: site.scheme,
-        host: site.host,
-        port: site.hasPort ? site.port : null,
-        path: '/read_book.php',
-        queryParameters: {'id': '$id', 'p': '$page'},
-      );
+    scheme: site.scheme,
+    host: site.host,
+    port: site.hasPort ? site.port : null,
+    path: '/read_book.php',
+    queryParameters: {'id': '$id', 'p': '$page'},
+  );
 
   /// Scheme + host of [url], the part worth remembering between imports.
-  static Uri siteOf(Uri url) =>
-      Uri(scheme: url.scheme, host: url.host, port: url.hasPort ? url.port : null);
+  static Uri siteOf(Uri url) => Uri(
+    scheme: url.scheme,
+    host: url.host,
+    port: url.hasPort ? url.port : null,
+  );
 
   static final _ws = RegExp(r'\s+');
   static final _pageParam = RegExp(r'[?&]p=(\d+)');
@@ -75,12 +81,18 @@ class LoveReadSource {
     final doc = html_parser.parse(html);
     final paragraphs = <String>[];
     for (final p in doc.querySelectorAll('p.MsoNormal')) {
-      final text = p.text.replaceAll(' ', ' ').replaceAll('­', '').replaceAll(_ws, ' ').trim();
+      final text = p.text
+          .replaceAll(' ', ' ')
+          .replaceAll('­', '')
+          .replaceAll(_ws, ' ')
+          .trim();
       if (text.isNotEmpty) paragraphs.add(text);
     }
     var last = 1;
     for (final a in doc.querySelectorAll('.navigation a')) {
-      final n = int.tryParse(_pageParam.firstMatch(a.attributes['href'] ?? '')?.group(1) ?? '');
+      final n = int.tryParse(
+        _pageParam.firstMatch(a.attributes['href'] ?? '')?.group(1) ?? '',
+      );
       if (n != null && n > last) last = n;
     }
     // "<title>Name – страница 1 | Author | Читать онлайн на LoveRead.ec</title>"
@@ -98,7 +110,12 @@ class LoveReadSource {
   /// First page not yet imported by a book that started at [firstPage] and
   /// holds [paragraphCount] paragraphs: pages are walked until their
   /// paragraphs add up to that count.
-  Future<int> findNextPage(Uri site, int id, int firstPage, int paragraphCount) async {
+  Future<int> findNextPage(
+    Uri site,
+    int id,
+    int firstPage,
+    int paragraphCount,
+  ) async {
     var seen = 0;
     var page = firstPage;
     while (seen < paragraphCount) {
@@ -120,7 +137,9 @@ class LoveReadSource {
     int? pageCount,
     void Function(int done, int total)? onProgress,
   }) async {
-    final first = parsePage(await _fetcher.fetchHtml(pageUrl(site, id, firstPage)));
+    final first = parsePage(
+      await _fetcher.fetchHtml(pageUrl(site, id, firstPage)),
+    );
     final lastAvailable = first.lastPage;
     final lastWanted = pageCount == null
         ? lastAvailable
@@ -131,7 +150,8 @@ class LoveReadSource {
     for (var page = firstPage + 1; page <= lastWanted; page++) {
       await Future<void>.delayed(pageDelay);
       paragraphs.addAll(
-          parsePage(await _fetcher.fetchHtml(pageUrl(site, id, page))).paragraphs);
+        parsePage(await _fetcher.fetchHtml(pageUrl(site, id, page))).paragraphs,
+      );
       onProgress?.call(page - firstPage + 1, total);
     }
     if (paragraphs.isEmpty) {

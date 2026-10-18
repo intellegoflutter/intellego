@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - 'lib/**'
+      - 'test/**'
+      - 'tool/**'
+      - 'integration_test/**'
       - 'android/**'
       - 'assets/**'
       - 'pubspec.*'
@@ -30,6 +33,7 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test tool integration_test
       - run: flutter analyze lib
       - run: flutter test
 

@@ -53,12 +53,18 @@ class PlatformSpeaker implements RussianSpeaker {
 
   Future<void> _prepare(String language) async {
     if (_language == language) return;
-    final languages = (await _tts.getLanguages as List?)?.map((e) => '$e').toList() ?? const [];
-    final matches = languages.where((l) => l.toLowerCase().split(RegExp(r'[-_]')).first == language);
+    final languages =
+        (await _tts.getLanguages as List?)?.map((e) => '$e').toList() ??
+        const [];
+    final matches = languages.where(
+      (l) => l.toLowerCase().split(RegExp(r'[-_]')).first == language,
+    );
     if (matches.isEmpty) {
-      throw StateError('No ${languageLabelFor(language)} voice is installed. Open the phone '
-          'settings → System → Languages → Text-to-speech and install '
-          '${languageLabelFor(language)} voice data.');
+      throw StateError(
+        'No ${languageLabelFor(language)} voice is installed. Open the phone '
+        'settings → System → Languages → Text-to-speech and install '
+        '${languageLabelFor(language)} voice data.',
+      );
     }
     await _tts.setLanguage(matches.first);
     if (!_configured) {
@@ -95,10 +101,19 @@ class SpdSaySpeaker implements RussianSpeaker {
   Future<void> speak(String text, {String language = 'ru'}) async {
     await stop();
     try {
-      final process = _process = await Process.start('spd-say', ['-l', language, '-r', '-30', '-w', text]);
+      final process = _process = await Process.start('spd-say', [
+        '-l',
+        language,
+        '-r',
+        '-30',
+        '-w',
+        text,
+      ]);
       await process.exitCode;
     } on ProcessException {
-      throw StateError('Install speech-dispatcher (spd-say) to hear speech on this computer.');
+      throw StateError(
+        'Install speech-dispatcher (spd-say) to hear speech on this computer.',
+      );
     } finally {
       _process = null;
     }

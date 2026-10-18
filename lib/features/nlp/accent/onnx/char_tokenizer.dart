@@ -17,8 +17,8 @@ class CharTokenizer {
   late final int _unk, _bos, _eos;
 
   List<int> encode(String word) => [
-        _bos,
-        for (final r in word.runes) _vocab[String.fromCharCode(r)] ?? _unk,
-        _eos,
-      ];
+    _bos,
+    for (final r in word.runes) _vocab[String.fromCharCode(r)] ?? _unk,
+    _eos,
+  ];
 }

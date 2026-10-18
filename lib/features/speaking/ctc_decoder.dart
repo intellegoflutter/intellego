@@ -3,8 +3,13 @@
 /// [logProbs] is `[frames][vocab]` flattened. [tokens] maps token ids to text
 /// (id 0 is the space of GigaAM's character vocabulary); the blank is
 /// [blank], by convention the last id.
-String ctcGreedyDecode(List<double> logProbs, int frames, int vocab, List<String> tokens,
-    {int? blank}) {
+String ctcGreedyDecode(
+  List<double> logProbs,
+  int frames,
+  int vocab,
+  List<String> tokens, {
+  int? blank,
+}) {
   final blankId = blank ?? vocab - 1;
   final out = StringBuffer();
   var previous = -1;

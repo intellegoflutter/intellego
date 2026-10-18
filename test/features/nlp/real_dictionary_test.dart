@@ -14,21 +14,30 @@ void main() {
 
   test('real dictionary accents a sample sentence', () async {
     Set<String> keys(String n) => (jsonDecode(
-            File('assets/dict/$n.json').readAsStringSync()) as Map<String, dynamic>)
-        .keys
-        .toSet();
+      File('assets/dict/$n.json').readAsStringSync(),
+    ) as Map<String, dynamic>).keys.toSet();
     final acc = DictionaryAccentuator(
       stress: FileStressDictionary(
-          dat, File('assets/dict/stress.idx').readAsStringSync()),
-      yoWords: (jsonDecode(File('assets/dict/yo_words.json').readAsStringSync())
-              as Map<String, dynamic>)
-          .cast<String, String>(),
+        dat,
+        File('assets/dict/stress.idx').readAsStringSync(),
+      ),
+      yoWords: (jsonDecode(
+        File('assets/dict/yo_words.json').readAsStringSync(),
+      ) as Map<String, dynamic>).cast<String, String>(),
       omographs: keys('omographs'),
       yoHomographs: keys('yo_homographs'),
     );
     const m = stressMark;
-    final out = await acc.accent('Мама купила молоко, а потом пошла домой. Елка стояла в углу.');
-    expect(out, contains('Ма$m' 'ма'));
+    final out = await acc.accent(
+      'Мама купила молоко, а потом пошла домой. Елка стояла в углу.',
+    );
+    expect(
+      out,
+      contains(
+        'Ма$m'
+        'ма',
+      ),
+    );
     expect(out, contains('молоко$m'));
     expect(out, contains('Ёлка'));
     expect(out, contains('углу$m'));

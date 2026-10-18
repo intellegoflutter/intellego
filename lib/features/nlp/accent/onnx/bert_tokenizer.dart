@@ -23,21 +23,23 @@ final _space = RegExp(r'\p{Zs}', unicode: true);
 /// `DistilBertTokenizer` with `do_lower_case=false`, `strip_accents=null`.
 class BertTokenizer {
   BertTokenizer(this._vocab, {Map<String, int> addedTokens = const {}})
-      : _added = addedTokens {
+    : _added = addedTokens {
     _unk = _vocab['[UNK]']!;
     _cls = _vocab['[CLS]']!;
     _sep = _vocab['[SEP]']!;
     if (_added.isNotEmpty) {
-      final alternatives = (_added.keys.toList()
-            ..sort((a, b) => b.length.compareTo(a.length)))
-          .map(RegExp.escape)
-          .join('|');
+      final alternatives =
+          (_added.keys.toList()..sort((a, b) => b.length.compareTo(a.length)))
+              .map(RegExp.escape)
+              .join('|');
       _addedPattern = RegExp(alternatives);
     }
   }
 
-  factory BertTokenizer.fromVocabText(String vocabText,
-      {Map<String, int> addedTokens = const {}}) {
+  factory BertTokenizer.fromVocabText(
+    String vocabText, {
+    Map<String, int> addedTokens = const {},
+  }) {
     final vocab = <String, int>{};
     var i = 0;
     for (final line in const LineSplitter().convert(vocabText)) {
@@ -76,13 +78,18 @@ class BertTokenizer {
     final starts = [-1, ...aStarts, -1, ...bStarts, -1];
     final cont = [false, ...aCont, false, ...bCont, false];
     final types = [
-      for (var i = 0; i < ids.length; i++) i <= aIds.length + 1 ? 0 : 1
+      for (var i = 0; i < ids.length; i++) i <= aIds.length + 1 ? 0 : 1,
     ];
     return BertEncoding(ids, types, starts, cont);
   }
 
-  void _tokenizeInto(String text, List<int> ids, List<int> starts,
-      List<bool> cont, {required int budget}) {
+  void _tokenizeInto(
+    String text,
+    List<int> ids,
+    List<int> starts,
+    List<bool> cont, {
+    required int budget,
+  }) {
     var pos = 0;
     final pattern = _addedPattern;
     if (pattern != null) {
@@ -102,8 +109,13 @@ class BertTokenizer {
     }
   }
 
-  void _basic(String text, int base, List<int> ids, List<int> starts,
-      List<bool> cont) {
+  void _basic(
+    String text,
+    int base,
+    List<int> ids,
+    List<int> starts,
+    List<bool> cont,
+  ) {
     var wordStart = -1;
     final word = StringBuffer();
     void flush() {
@@ -119,7 +131,11 @@ class BertTokenizer {
       final here = offset;
       offset += ch.length;
       if (rune == 0 || rune == 0xFFFD) continue;
-      final isWs = ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
+      final isWs =
+          ch == ' ' ||
+          ch == '\t' ||
+          ch == '\n' ||
+          ch == '\r' ||
           _space.hasMatch(ch);
       if (isWs) {
         flush();
@@ -154,8 +170,13 @@ class BertTokenizer {
       (r >= 0xF900 && r <= 0xFAFF) ||
       (r >= 0x2F800 && r <= 0x2FA1F);
 
-  void _wordPiece(String word, int start, List<int> ids, List<int> starts,
-      List<bool> cont) {
+  void _wordPiece(
+    String word,
+    int start,
+    List<int> ids,
+    List<int> starts,
+    List<bool> cont,
+  ) {
     final chars = word.runes.map(String.fromCharCode).toList();
     if (chars.length > _maxCharsPerWord) {
       ids.add(_unk);

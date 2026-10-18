@@ -3,21 +3,23 @@ import 'package:intellego/data/book.dart';
 
 void main() {
   Book base() => Book(
-        id: '1',
-        title: 't',
-        createdAt: DateTime(2026),
-        sentences: const [
-          BookSentence(text: 'a', accented: 'a', paragraph: 0),
-          BookSentence(text: 'b', accented: 'b', paragraph: 0),
-          BookSentence(text: 'c', accented: 'c', paragraph: 1),
-        ],
-      );
+    id: '1',
+    title: 't',
+    createdAt: DateTime(2026),
+    sentences: const [
+      BookSentence(text: 'a', accented: 'a', paragraph: 0),
+      BookSentence(text: 'b', accented: 'b', paragraph: 0),
+      BookSentence(text: 'c', accented: 'c', paragraph: 1),
+    ],
+  );
 
   test('translations round trip and keep other edits', () {
-    var book = base().withTranslations(
-        [Translation(name: 'English', lines: ['one', '', 'three'], visible: false)]);
-    book = book.withSentences([...book.sentences]
-      ..[0] = book.sentences[0].copyWith(practiced: true));
+    var book = base().withTranslations([
+      Translation(name: 'English', lines: ['one', '', 'three'], visible: false),
+    ]);
+    book = book.withSentences(
+      [...book.sentences]..[0] = book.sentences[0].copyWith(practiced: true),
+    );
     final back = Book.fromJson(book.toJson());
     expect(back.translations.single.name, 'English');
     expect(back.translations.single.visible, isFalse);
@@ -39,7 +41,9 @@ void main() {
   });
 
   test('translations survive audio and sentence updates', () {
-    final book = base().withTranslations([const Translation(name: 'EN', lines: ['x', 'y', 'z'])]);
+    final book = base().withTranslations([
+      const Translation(name: 'EN', lines: ['x', 'y', 'z']),
+    ]);
     expect(book.withSentences(book.sentences).translations, hasLength(1));
     expect(book.withTracks(const []).translations, hasLength(1));
   });

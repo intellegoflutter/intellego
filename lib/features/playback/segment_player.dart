@@ -28,7 +28,8 @@ class JustAudioSegmentPlayer implements SegmentPlayer {
   StreamSubscription<Duration>? _endWatch;
 
   @override
-  Stream<int> get positionMs => _player.positionStream.map((d) => d.inMilliseconds);
+  Stream<int> get positionMs =>
+      _player.positionStream.map((d) => d.inMilliseconds);
 
   @override
   int get currentMs => _player.position.inMilliseconds;
@@ -75,7 +76,8 @@ class VlcSegmentPlayer implements SegmentPlayer {
   Stream<int> get positionMs => _controller.stream;
 
   @override
-  int get currentMs => _base + (_clock.isRunning ? _clock.elapsedMilliseconds : 0);
+  int get currentMs =>
+      _base + (_clock.isRunning ? _clock.elapsedMilliseconds : 0);
 
   @override
   bool get isPlaying => _clock.isRunning;
@@ -88,21 +90,29 @@ class VlcSegmentPlayer implements SegmentPlayer {
       ..reset()
       ..start();
     final process = await Process.start('cvlc', [
-      '--intf', 'dummy', '--no-video', '--play-and-exit', '--quiet',
+      '--intf',
+      'dummy',
+      '--no-video',
+      '--play-and-exit',
+      '--quiet',
       '--start-time=${startMs / 1000}',
       '--stop-time=${endMs / 1000}',
       path,
     ]);
     _process = process;
-    unawaited(process.exitCode.then((_) {
-      if (_process == process) {
-        _clock.stop();
-        _base = endMs;
-        _ticker?.cancel();
-      }
-    }));
+    unawaited(
+      process.exitCode.then((_) {
+        if (_process == process) {
+          _clock.stop();
+          _base = endMs;
+          _ticker?.cancel();
+        }
+      }),
+    );
     _ticker = Timer.periodic(
-        const Duration(milliseconds: 250), (_) => _controller.add(currentMs));
+      const Duration(milliseconds: 250),
+      (_) => _controller.add(currentMs),
+    );
   }
 
   @override
@@ -123,5 +133,6 @@ class VlcSegmentPlayer implements SegmentPlayer {
   }
 }
 
-SegmentPlayer createSegmentPlayer() =>
-    Platform.isAndroid || Platform.isIOS ? JustAudioSegmentPlayer() : VlcSegmentPlayer();
+SegmentPlayer createSegmentPlayer() => Platform.isAndroid || Platform.isIOS
+    ? JustAudioSegmentPlayer()
+    : VlcSegmentPlayer();

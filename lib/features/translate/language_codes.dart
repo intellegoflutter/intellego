@@ -39,7 +39,14 @@ const _names = {
   'it': ['italian', 'italiano', 'итальянский', 'італійська'],
   'uk': ['ukrainian', 'українська', 'украинский', 'ucraino'],
   'de': ['german', 'deutsch', 'немецкий', 'німецька', 'tedesco'],
-  'fr': ['french', 'français', 'francais', 'французский', 'французька', 'francese'],
+  'fr': [
+    'french',
+    'français',
+    'francais',
+    'французский',
+    'французька',
+    'francese',
+  ],
   'es': ['spanish', 'español', 'espanol', 'испанский', 'іспанська', 'spagnolo'],
   'pl': ['polish', 'polski', 'польский', 'польська', 'polacco'],
   'nl': ['dutch', 'nederlands', 'нидерландский', 'olandese'],
@@ -55,5 +62,5 @@ final _byName = {
   for (final e in _names.entries) ...{
     e.key: e.key,
     for (final n in e.value) n: e.key,
-  }
+  },
 };

@@ -17,8 +17,8 @@ class FetchException implements Exception {
 /// Downloads a web page and extracts its readable paragraphs.
 class WebTextFetcher {
   WebTextFetcher({http.Client? client, HtmlTextExtractor? extractor})
-      : _client = client ?? http.Client(),
-        _extractor = extractor ?? const HtmlTextExtractor();
+    : _client = client ?? http.Client(),
+      _extractor = extractor ?? const HtmlTextExtractor();
 
   final http.Client _client;
   final HtmlTextExtractor _extractor;
@@ -38,10 +38,13 @@ class WebTextFetcher {
     }
     final http.Response response;
     try {
-      response = await _client.get(url, headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; IntellegoReader/1.0)',
-        'Accept-Language': 'ru,en;q=0.5',
-      });
+      response = await _client.get(
+        url,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; IntellegoReader/1.0)',
+          'Accept-Language': 'ru,en;q=0.5',
+        },
+      );
     } catch (e) {
       throw FetchException('Request failed: $e');
     }
@@ -66,15 +69,19 @@ class WebTextFetcher {
 
   String? _charset(String? contentType) {
     if (contentType == null) return null;
-    final m = RegExp(r'charset=([\w\-]+)', caseSensitive: false)
-        .firstMatch(contentType);
+    final m = RegExp(
+      r'charset=([\w\-]+)',
+      caseSensitive: false,
+    ).firstMatch(contentType);
     return m?.group(1)?.toLowerCase();
   }
 
   String? _sniffMeta(List<int> bytes) {
     final head = latin1.decode(bytes.take(2048).toList());
-    final m = RegExp(r'charset=["\x27]?([\w\-]+)', caseSensitive: false)
-        .firstMatch(head);
+    final m = RegExp(
+      r'charset=["\x27]?([\w\-]+)',
+      caseSensitive: false,
+    ).firstMatch(head);
     return m?.group(1)?.toLowerCase();
   }
 }

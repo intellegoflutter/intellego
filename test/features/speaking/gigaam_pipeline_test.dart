@@ -23,13 +23,16 @@ void main() {
 
     test('a tone lights up the mel band of its frequency', () {
       int bandOf(double hz) {
-        final samples = Float32List.fromList(
-            [for (var i = 0; i < 16000; i++) math.sin(2 * math.pi * hz * i / 16000) * 0.5]);
+        final samples = Float32List.fromList([
+          for (var i = 0; i < 16000; i++)
+            math.sin(2 * math.pi * hz * i / 16000) * 0.5,
+        ]);
         final f = gigaLogMel(samples);
         final mid = 50; // a frame in the middle
         var best = 0;
         for (var m = 1; m < gigaMels; m++) {
-          if (f.data[m * f.frames + mid] > f.data[best * f.frames + mid]) best = m;
+          if (f.data[m * f.frames + mid] > f.data[best * f.frames + mid])
+            best = m;
         }
         return best;
       }
@@ -57,8 +60,10 @@ void main() {
   group('ctcGreedyDecode', () {
     final tokens = [' ', 'а', 'б', '<blk>'];
     List<double> frames(List<int> best) => [
-          for (final b in best) ...[for (var v = 0; v < 4; v++) v == b ? 0.0 : -5.0]
-        ];
+      for (final b in best) ...[
+        for (var v = 0; v < 4; v++) v == b ? 0.0 : -5.0,
+      ],
+    ];
 
     test('merges repeats, drops blanks, keeps a repeat across a blank', () {
       // а а <blk> а б б <blk> space а
@@ -79,7 +84,8 @@ void main() {
 
   group('WAV', () {
     test('round trip through the recorder writer', () {
-      final pcm = Int16List.fromList([0, 16384, -16384, 32767]).buffer.asUint8List();
+      final pcm = Int16List.fromList([0, 16384, -16384, 32767]).buffer
+          .asUint8List();
       final back = readWavPcm16(pcm16ToWav(pcm));
       expect(back.sampleRate, 16000);
       expect(back.samples.length, 4);
@@ -92,7 +98,11 @@ void main() {
     });
 
     test('resample changes the length by the rate ratio', () {
-      final out = resample(Float32List.fromList(List.generate(480, (i) => i.toDouble())), 48000, 16000);
+      final out = resample(
+        Float32List.fromList(List.generate(480, (i) => i.toDouble())),
+        48000,
+        16000,
+      );
       expect(out.length, 160);
       expect(out[1], closeTo(3, 1e-4));
     });

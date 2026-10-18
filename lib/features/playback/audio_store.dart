@@ -9,8 +9,9 @@ class AudioStore {
   Directory? _root;
 
   Future<Directory> get dir async {
-    final d = _root ??=
-        Directory('${(await getApplicationSupportDirectory()).path}/audio');
+    final d = _root ??= Directory(
+      '${(await getApplicationSupportDirectory()).path}/audio',
+    );
     await d.create(recursive: true);
     return d;
   }

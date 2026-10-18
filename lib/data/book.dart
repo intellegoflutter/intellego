@@ -19,42 +19,51 @@ class BookSentence {
   final bool practiced;
 
   BookSentence copyWith({bool? practiced}) => BookSentence(
-        text: text,
-        accented: accented,
-        paragraph: paragraph,
-        practiced: practiced ?? this.practiced,
-      );
+    text: text,
+    accented: accented,
+    paragraph: paragraph,
+    practiced: practiced ?? this.practiced,
+  );
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'accented': accented,
-        'paragraph': paragraph,
-        'practiced': practiced,
-      };
+    'text': text,
+    'accented': accented,
+    'paragraph': paragraph,
+    'practiced': practiced,
+  };
 
   factory BookSentence.fromJson(Map<String, dynamic> j) => BookSentence(
-        text: j['text'] as String,
-        accented: j['accented'] as String,
-        paragraph: j['paragraph'] as int,
-        practiced: j['practiced'] as bool? ?? false,
-      );
+    text: j['text'] as String,
+    accented: j['accented'] as String,
+    paragraph: j['paragraph'] as int,
+    practiced: j['practiced'] as bool? ?? false,
+  );
 }
 
 /// One audio file of an [AudioTrack]: the track sentences from index [from] up
 /// to the next part belong to it.
 class AudioPart {
-  const AudioPart({required this.videoId, required this.title, required this.from});
+  const AudioPart({
+    required this.videoId,
+    required this.title,
+    required this.from,
+  });
 
   final String videoId;
   final String title;
   final int from;
 
-  Map<String, dynamic> toJson() => {'videoId': videoId, 'title': title, 'from': from};
+  Map<String, dynamic> toJson() => {
+    'videoId': videoId,
+    'title': title,
+    'from': from,
+  };
 
   factory AudioPart.fromJson(Map<String, dynamic> j) => AudioPart(
-      videoId: j['videoId'] as String,
-      title: j['title'] as String? ?? '',
-      from: j['from'] as int? ?? 0);
+    videoId: j['videoId'] as String,
+    title: j['title'] as String? ?? '',
+    from: j['from'] as int? ?? 0,
+  );
 }
 
 /// For every Russian sentence of the book, the track sentences `[from, to)`
@@ -62,7 +71,11 @@ class AudioPart {
 /// words match, 0..1 (low = probably misaligned). Shorter than the book when
 /// sentences were added after the last alignment; the tail is then unaligned.
 class TrackAlignment {
-  const TrackAlignment({this.from = const [], this.to = const [], this.confidence = const []});
+  const TrackAlignment({
+    this.from = const [],
+    this.to = const [],
+    this.confidence = const [],
+  });
 
   final List<int?> from;
   final List<int?> to;
@@ -77,20 +90,21 @@ class TrackAlignment {
 
   /// Compact JSON: -1 stands for "none".
   Map<String, dynamic> toJson() => {
-        'from': [for (final v in from) v ?? -1],
-        'to': [for (final v in to) v ?? -1],
-        'conf': [for (final v in confidence) v == null ? -1 : (v * 1000).round()],
-      };
+    'from': [for (final v in from) v ?? -1],
+    'to': [for (final v in to) v ?? -1],
+    'conf': [for (final v in confidence) v == null ? -1 : (v * 1000).round()],
+  };
 
   factory TrackAlignment.fromJson(Map<String, dynamic> j) {
-    List<int?> ints(String key) =>
-        [for (final v in (j[key] as List? ?? const [])) (v as int) < 0 ? null : v];
+    List<int?> ints(String key) => [
+      for (final v in (j[key] as List? ?? const [])) (v as int) < 0 ? null : v,
+    ];
     return TrackAlignment(
       from: ints('from'),
       to: ints('to'),
       confidence: [
         for (final v in (j['conf'] as List? ?? const []))
-          (v as int) < 0 ? null : v / 1000
+          (v as int) < 0 ? null : v / 1000,
       ],
     );
   }
@@ -162,9 +176,9 @@ class AudioTrack {
 
   /// Track sentences `[from, to)` of part [part].
   (int, int) partRange(int part) => (
-        parts[part].from,
-        part + 1 < parts.length ? parts[part + 1].from : sentences.length,
-      );
+    parts[part].from,
+    part + 1 < parts.length ? parts[part + 1].from : sentences.length,
+  );
 
   /// Index of the track sentence spoken at [ms] in part [part] (the last one
   /// starting at or before it), or null before the first.
@@ -192,64 +206,72 @@ class AudioTrack {
     bool? visible,
     List<String>? bridge,
     bool clearBridge = false,
-  }) =>
-      AudioTrack(
-        language: language,
-        label: label ?? this.label,
-        parts: parts ?? this.parts,
-        sentences: sentences ?? this.sentences,
-        anchors: anchors ?? this.anchors,
-        alignment: alignment ?? this.alignment,
-        visible: visible ?? this.visible,
-        bridge: clearBridge ? null : (bridge ?? this.bridge),
-      );
+  }) => AudioTrack(
+    language: language,
+    label: label ?? this.label,
+    parts: parts ?? this.parts,
+    sentences: sentences ?? this.sentences,
+    anchors: anchors ?? this.anchors,
+    alignment: alignment ?? this.alignment,
+    visible: visible ?? this.visible,
+    bridge: clearBridge ? null : (bridge ?? this.bridge),
+  );
 
   Map<String, dynamic> toJson() => {
-        'language': language,
-        'label': label,
-        'visible': visible,
-        'parts': [for (final p in parts) p.toJson()],
-        'sentences': [for (final s in sentences) s.toJson()],
-        'anchors': [for (final a in anchors) [a.$1, a.$2]],
-        'alignment': alignment.toJson(),
-        if (bridge != null) 'bridge': bridge,
-      };
+    'language': language,
+    'label': label,
+    'visible': visible,
+    'parts': [for (final p in parts) p.toJson()],
+    'sentences': [for (final s in sentences) s.toJson()],
+    'anchors': [
+      for (final a in anchors) [a.$1, a.$2],
+    ],
+    'alignment': alignment.toJson(),
+    if (bridge != null) 'bridge': bridge,
+  };
 
-  factory AudioTrack.fromJson(Map<String, dynamic> j, {TrackAlignment? legacyAlignment}) =>
-      AudioTrack(
-        language: j['language'] as String? ?? 'uk',
-        label: j['label'] as String? ?? 'Ukrainian',
-        visible: j['visible'] as bool? ?? true,
-        parts: j['parts'] == null
-            ? [
-                AudioPart(
-                    videoId: j['videoId'] as String,
-                    title: j['videoTitle'] as String? ?? '',
-                    from: 0)
-              ]
-            : [
-                for (final p in j['parts'] as List)
-                  AudioPart.fromJson(p as Map<String, dynamic>)
-              ],
-        sentences: [
-          for (final s in j['sentences'] as List)
-            TimedText.fromJson(s as Map<String, dynamic>)
-        ],
-        anchors: [
-          for (final a in (j['anchors'] as List? ?? const []))
-            ((a as List)[0] as int, a[1] as int)
-        ],
-        alignment: j['alignment'] == null
-            ? (legacyAlignment ?? const TrackAlignment())
-            : TrackAlignment.fromJson(j['alignment'] as Map<String, dynamic>),
-        bridge: (j['bridge'] as List?)?.cast<String>(),
-      );
+  factory AudioTrack.fromJson(
+    Map<String, dynamic> j, {
+    TrackAlignment? legacyAlignment,
+  }) => AudioTrack(
+    language: j['language'] as String? ?? 'uk',
+    label: j['label'] as String? ?? 'Ukrainian',
+    visible: j['visible'] as bool? ?? true,
+    parts: j['parts'] == null
+        ? [
+            AudioPart(
+              videoId: j['videoId'] as String,
+              title: j['videoTitle'] as String? ?? '',
+              from: 0,
+            ),
+          ]
+        : [
+            for (final p in j['parts'] as List)
+              AudioPart.fromJson(p as Map<String, dynamic>),
+          ],
+    sentences: [
+      for (final s in j['sentences'] as List)
+        TimedText.fromJson(s as Map<String, dynamic>),
+    ],
+    anchors: [
+      for (final a in (j['anchors'] as List? ?? const []))
+        ((a as List)[0] as int, a[1] as int),
+    ],
+    alignment: j['alignment'] == null
+        ? (legacyAlignment ?? const TrackAlignment())
+        : TrackAlignment.fromJson(j['alignment'] as Map<String, dynamic>),
+    bridge: (j['bridge'] as List?)?.cast<String>(),
+  );
 }
 
 /// An extra language the user maintains for a book, one line per sentence
 /// (empty = not written yet). Edited by hand or pasted in bulk.
 class Translation {
-  const Translation({required this.name, required this.lines, this.visible = true});
+  const Translation({
+    required this.name,
+    required this.lines,
+    this.visible = true,
+  });
 
   /// Free-form label such as "English" or "Español".
   final String name;
@@ -271,13 +293,17 @@ class Translation {
 
   int get filled => lines.where((l) => l.isNotEmpty).length;
 
-  Map<String, dynamic> toJson() => {'name': name, 'visible': visible, 'lines': lines};
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'visible': visible,
+    'lines': lines,
+  };
 
   factory Translation.fromJson(Map<String, dynamic> j) => Translation(
-        name: j['name'] as String,
-        visible: j['visible'] as bool? ?? true,
-        lines: (j['lines'] as List).cast<String>(),
-      );
+    name: j['name'] as String,
+    visible: j['visible'] as bool? ?? true,
+    lines: (j['lines'] as List).cast<String>(),
+  );
 }
 
 class Book {
@@ -324,7 +350,10 @@ class Book {
     if (!hasAudioAt(i, track)) return null;
     final t = tracks[track];
     final a = t.alignment;
-    return t.sentences.sublist(a.from[i]!, a.to[i]!).map((e) => e.text).join(' ');
+    return t.sentences
+        .sublist(a.from[i]!, a.to[i]!)
+        .map((e) => e.text)
+        .join(' ');
   }
 
   /// Match score 0..1 of sentence [i] in track [track], null when unknown.
@@ -340,8 +369,10 @@ class Book {
   /// The audio file and interval of sentence [i] in track [track], or null.
   /// When the sentence straddles two parts only the piece in the first is
   /// returned.
-  ({String videoId, int part, int startMs, int endMs})? audioSegmentFor(int i,
-      [int track = 0]) {
+  ({String videoId, int part, int startMs, int endMs})? audioSegmentFor(
+    int i, [
+    int track = 0,
+  ]) {
     if (!hasAudioAt(i, track)) return null;
     final t = tracks[track];
     final from = t.alignment.from[i]!, to = t.alignment.to[i]!;
@@ -360,17 +391,16 @@ class Book {
     List<AudioTrack>? tracks,
     List<Translation>? translations,
     int? nextPage,
-  }) =>
-      Book(
-        id: id,
-        title: title,
-        sourceUrl: sourceUrl,
-        createdAt: createdAt,
-        sentences: sentences ?? this.sentences,
-        tracks: tracks ?? this.tracks,
-        translations: translations ?? this.translations,
-        nextPage: nextPage ?? this.nextPage,
-      );
+  }) => Book(
+    id: id,
+    title: title,
+    sourceUrl: sourceUrl,
+    createdAt: createdAt,
+    sentences: sentences ?? this.sentences,
+    tracks: tracks ?? this.tracks,
+    translations: translations ?? this.translations,
+    nextPage: nextPage ?? this.nextPage,
+  );
 
   Book withSentences(List<BookSentence> next) => _copy(sentences: next);
 
@@ -380,38 +410,38 @@ class Book {
 
   /// [track] replaces the one at [index], or is added when [index] is null.
   Book withTrack(AudioTrack track, {int? index}) => withTracks([
-        for (var i = 0; i < tracks.length; i++) i == index ? track : tracks[i],
-        if (index == null) track,
-      ]);
+    for (var i = 0; i < tracks.length; i++) i == index ? track : tracks[i],
+    if (index == null) track,
+  ]);
 
   Book withoutTrack(int index) => withTracks([
-        for (var i = 0; i < tracks.length; i++)
-          if (i != index) tracks[i]
-      ]);
+    for (var i = 0; i < tracks.length; i++)
+      if (i != index) tracks[i],
+  ]);
 
   /// Adds [more] sentences at the end; every translation gets empty lines
   /// for them so indices (audio links, sync points) stay valid. Track
   /// alignments simply end earlier than the book.
   Book appended(List<BookSentence> more, {int? nextPage}) => _copy(
-        sentences: [...sentences, ...more],
-        translations: [
-          for (final t in translations)
-            t.copyWith(lines: [...t.lines, ...List.filled(more.length, '')])
-        ],
-        nextPage: nextPage,
-      );
+    sentences: [...sentences, ...more],
+    translations: [
+      for (final t in translations)
+        t.copyWith(lines: [...t.lines, ...List.filled(more.length, '')]),
+    ],
+    nextPage: nextPage,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'sourceUrl': sourceUrl,
-        'createdAt': createdAt.toIso8601String(),
-        'sentences': [for (final s in sentences) s.toJson()],
-        if (nextPage != null) 'nextPage': nextPage,
-        if (tracks.isNotEmpty) 'audioTracks': [for (final t in tracks) t.toJson()],
-        if (translations.isNotEmpty)
-          'translations': [for (final t in translations) t.toJson()],
-      };
+    'id': id,
+    'title': title,
+    'sourceUrl': sourceUrl,
+    'createdAt': createdAt.toIso8601String(),
+    'sentences': [for (final s in sentences) s.toJson()],
+    if (nextPage != null) 'nextPage': nextPage,
+    if (tracks.isNotEmpty) 'audioTracks': [for (final t in tracks) t.toJson()],
+    if (translations.isNotEmpty)
+      'translations': [for (final t in translations) t.toJson()],
+  };
 
   factory Book.fromJson(Map<String, dynamic> j) {
     final rawSentences = j['sentences'] as List;
@@ -419,13 +449,14 @@ class Book {
     if (j['audioTracks'] != null) {
       tracks = [
         for (final t in j['audioTracks'] as List)
-          AudioTrack.fromJson(t as Map<String, dynamic>)
+          AudioTrack.fromJson(t as Map<String, dynamic>),
       ];
     } else if (j['audio'] != null) {
       // Books saved before audio tracks: one Ukrainian audiobook whose
       // alignment lived in the sentences.
-      List<int?> ints(String key) =>
-          [for (final s in rawSentences) (s as Map<String, dynamic>)[key] as int?];
+      List<int?> ints(String key) => [
+        for (final s in rawSentences) (s as Map<String, dynamic>)[key] as int?,
+      ];
       tracks = [
         AudioTrack.fromJson(
           j['audio'] as Map<String, dynamic>,
@@ -434,10 +465,10 @@ class Book {
             to: ints('ukTo'),
             confidence: [
               for (final s in rawSentences)
-                ((s as Map<String, dynamic>)['confidence'] as num?)?.toDouble()
+                ((s as Map<String, dynamic>)['confidence'] as num?)?.toDouble(),
             ],
           ),
-        )
+        ),
       ];
     } else {
       tracks = const [];
@@ -448,12 +479,13 @@ class Book {
       sourceUrl: j['sourceUrl'] as String?,
       createdAt: DateTime.parse(j['createdAt'] as String),
       sentences: [
-        for (final s in rawSentences) BookSentence.fromJson(s as Map<String, dynamic>)
+        for (final s in rawSentences)
+          BookSentence.fromJson(s as Map<String, dynamic>),
       ],
       tracks: tracks,
       translations: [
         for (final t in (j['translations'] as List? ?? const []))
-          Translation.fromJson(t as Map<String, dynamic>)
+          Translation.fromJson(t as Map<String, dynamic>),
       ],
       nextPage: j['nextPage'] as int?,
     );

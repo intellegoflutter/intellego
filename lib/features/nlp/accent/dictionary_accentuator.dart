@@ -17,7 +17,9 @@ class DictionaryAccentuator implements Accentuator {
   final Set<String> _omographs;
   final Set<String> _yoHomographs;
 
-  static final _word = RegExp('[А-Яа-яЁё$stressMark]+(?:-[А-Яа-яЁё$stressMark]+)*');
+  static final _word = RegExp(
+    '[А-Яа-яЁё$stressMark]+(?:-[А-Яа-яЁё$stressMark]+)*',
+  );
 
   bool isAmbiguous(String word) {
     final lower = word.toLowerCase();
@@ -25,7 +27,11 @@ class DictionaryAccentuator implements Accentuator {
   }
 
   @override
-  Future<String> accent(String text, {bool stress = true, bool yo = true}) async {
+  Future<String> accent(
+    String text, {
+    bool stress = true,
+    bool yo = true,
+  }) async {
     final out = StringBuffer();
     var last = 0;
     for (final m in _word.allMatches(text)) {
@@ -59,7 +65,10 @@ class DictionaryAccentuator implements Accentuator {
     final lower = part.toLowerCase();
     var form = lower;
     var result = part;
-    if (yo && !lower.contains('ё') && lower.contains('е') && !_yoHomographs.contains(lower)) {
+    if (yo &&
+        !lower.contains('ё') &&
+        lower.contains('е') &&
+        !_yoHomographs.contains(lower)) {
       final restored = _yoWords[lower];
       if (restored != null && restored.length == lower.length) {
         form = restored;
@@ -88,7 +97,8 @@ class DictionaryAccentuator implements Accentuator {
   }
 
   String _insertMark(String word, int vowelIndex) {
-    if (vowelIndex >= word.length || !russianVowels.contains(word[vowelIndex])) {
+    if (vowelIndex >= word.length ||
+        !russianVowels.contains(word[vowelIndex])) {
       return word;
     }
     return '${word.substring(0, vowelIndex + 1)}$stressMark${word.substring(vowelIndex + 1)}';

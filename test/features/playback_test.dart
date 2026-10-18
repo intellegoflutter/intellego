@@ -6,7 +6,12 @@ import 'package:intellego/features/playback/audio_store.dart';
 
 void main() {
   test('yt-dlp progress lines', () {
-    expect(parseYtDlpProgress('[download]  45.3% of  172.51MiB at 5.1MiB/s ETA 00:20'), closeTo(0.453, 1e-9));
+    expect(
+      parseYtDlpProgress(
+        '[download]  45.3% of  172.51MiB at 5.1MiB/s ETA 00:20',
+      ),
+      closeTo(0.453, 1e-9),
+    );
     expect(parseYtDlpProgress('[download] 100% of 172.51MiB in 00:34'), 1.0);
     expect(parseYtDlpProgress('[youtube] Extracting URL'), isNull);
   });

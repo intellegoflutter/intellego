@@ -13,7 +13,8 @@ class _Fake implements SentenceTranslator {
   Future<bool> isReady(String code) async => true;
 
   @override
-  Future<String> translate(String text, String code) => translateBetween(text, 'ru', code);
+  Future<String> translate(String text, String code) =>
+      translateBetween(text, 'ru', code);
 
   @override
   Future<String> translateBetween(String text, String from, String to) async {
@@ -26,15 +27,15 @@ class _Fake implements SentenceTranslator {
 }
 
 Book _book(List<Translation> t) => Book(
-      id: 'b',
-      title: 't',
-      createdAt: DateTime(2026),
-      sentences: const [
-        BookSentence(text: 'Привет.', accented: 'Приве́т.', paragraph: 0),
-        BookSentence(text: 'Пока.', accented: 'Пока́.', paragraph: 0),
-      ],
-      translations: t,
-    );
+  id: 'b',
+  title: 't',
+  createdAt: DateTime(2026),
+  sentences: const [
+    BookSentence(text: 'Привет.', accented: 'Приве́т.', paragraph: 0),
+    BookSentence(text: 'Пока.', accented: 'Пока́.', paragraph: 0),
+  ],
+  translations: t,
+);
 
 void main() {
   test('language labels map to codes', () {
@@ -44,7 +45,10 @@ void main() {
     expect(languageCodeFor('IT'), 'it');
     expect(languageCodeFor('Klingon'), isNull);
     expect(languageCodeFor(''), isNull);
-    expect(suggestedLanguages.every((l) => languageCodeFor(l.$1) == l.$2), isTrue);
+    expect(
+      suggestedLanguages.every((l) => languageCodeFor(l.$1) == l.$2),
+      isTrue,
+    );
   });
 
   test('only empty lines of known languages are translated', () async {
@@ -67,7 +71,10 @@ void main() {
       const Translation(name: 'English', lines: ['typed by hand', '']),
       const Translation(name: 'Italian', lines: ['', '']),
     ]);
-    final next = withTranslatedLines(book, 0, {'English': 'machine', 'Italian': 'Ciao.'});
+    final next = withTranslatedLines(book, 0, {
+      'English': 'machine',
+      'Italian': 'Ciao.',
+    });
     expect(next.translations[0].lines[0], 'typed by hand');
     expect(next.translations[1].lines[0], 'Ciao.');
     expect(identical(withTranslatedLines(book, 0, {}), book), isTrue);

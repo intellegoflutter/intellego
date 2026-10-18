@@ -31,7 +31,8 @@ final bookRepositoryProvider = FutureProvider<BookRepository>((ref) async {
 
 /// Dictionary-only accentuator, loaded lazily on first use.
 final accentuatorProvider = FutureProvider<Accentuator>(
-    (ref) async => loadDictionaryAccentuator());
+  (ref) async => loadDictionaryAccentuator(),
+);
 
 final modelStoreProvider = Provider<ModelStore>((ref) => ModelStore());
 
@@ -40,26 +41,35 @@ const defaultOmographSize = OmographModelSize.tiny2;
 /// Neural accentuator; the models must have been installed via [ModelStore].
 final onnxAccentuatorProvider = FutureProvider<Accentuator>((ref) async {
   final store = ref.read(modelStoreProvider);
-  return loadOnnxAccentuator(await store.nnDir,
-      data: await loadAccentData(), omographSize: defaultOmographSize);
+  return loadOnnxAccentuator(
+    await store.nnDir,
+    data: await loadAccentData(),
+    omographSize: defaultOmographSize,
+  );
 });
 
-final importServiceProvider =
-    Provider<ImportService>((ref) => ImportService(fetcher: WebTextFetcher()));
+final importServiceProvider = Provider<ImportService>(
+  (ref) => ImportService(fetcher: WebTextFetcher()),
+);
 
-final captionSourceProvider = Provider<CaptionSource>((ref) => YoutubeCaptionSource());
+final captionSourceProvider = Provider<CaptionSource>(
+  (ref) => YoutubeCaptionSource(),
+);
 
 final audioLinkerProvider = Provider<AudioLinker>(
-    (ref) => AudioLinker(translator: ref.read(sentenceTranslatorProvider)));
+  (ref) => AudioLinker(translator: ref.read(sentenceTranslatorProvider)),
+);
 
 final audioStoreProvider = Provider<AudioStore>((ref) => AudioStore());
 
-final audioDownloaderProvider =
-    Provider<YtDlpDownloader>((ref) => YtDlpDownloader(ref.read(audioStoreProvider)));
+final audioDownloaderProvider = Provider<YtDlpDownloader>(
+  (ref) => YtDlpDownloader(ref.read(audioStoreProvider)),
+);
 
 /// Local audio file of a video, null until downloaded or picked.
 final audioFileProvider = FutureProvider.family<File?, String>(
-    (ref, videoId) => ref.read(audioStoreProvider).find(videoId));
+  (ref, videoId) => ref.read(audioStoreProvider).find(videoId),
+);
 
 final segmentPlayerProvider = Provider<SegmentPlayer>((ref) {
   final player = createSegmentPlayer();
@@ -89,16 +99,22 @@ final speechRecorderProvider = Provider<SpeechRecorder>((ref) {
 
 /// Speech recognizer; the model must have been installed via [AsrModelStore].
 final speechRecognizerProvider = FutureProvider<SpeechRecognizer>((ref) async {
-  final recognizer = GigaAmRecognizer(await ref.read(asrModelStoreProvider).dir);
+  final recognizer = GigaAmRecognizer(
+    await ref.read(asrModelStoreProvider).dir,
+  );
   ref.onDispose(recognizer.dispose);
   return recognizer;
 });
 
-final feedbackWriterProvider =
-    Provider<FeedbackWriter>((ref) => const LocalFeedbackWriter());
+final feedbackWriterProvider = Provider<FeedbackWriter>(
+  (ref) => const LocalFeedbackWriter(),
+);
 
 /// Reading-aloud results of [bookId], loaded from their file.
-final speakingLogProvider = FutureProvider.family<SpeakingLog, String>((ref, bookId) async {
+final speakingLogProvider = FutureProvider.family<SpeakingLog, String>((
+  ref,
+  bookId,
+) async {
   final docs = await getApplicationDocumentsDirectory();
   final log = SpeakingLog(File('${docs.path}/speaking/$bookId.json'));
   await log.load();
@@ -118,16 +134,19 @@ class BooksNotifier extends AsyncNotifier<List<Book>> {
   Future<void> updateBook(Book book) async {
     await (await ref.read(bookRepositoryProvider.future)).save(book);
     state = AsyncData([
-      for (final b in state.value ?? const <Book>[]) b.id == book.id ? book : b
+      for (final b in state.value ?? const <Book>[]) b.id == book.id ? book : b,
     ]);
   }
 
   Future<void> remove(String id) async {
     await (await ref.read(bookRepositoryProvider.future)).delete(id);
-    state = AsyncData(
-        [for (final b in state.value ?? const <Book>[]) if (b.id != id) b]);
+    state = AsyncData([
+      for (final b in state.value ?? const <Book>[])
+        if (b.id != id) b,
+    ]);
   }
 }
 
-final booksProvider =
-    AsyncNotifierProvider<BooksNotifier, List<Book>>(BooksNotifier.new);
+final booksProvider = AsyncNotifierProvider<BooksNotifier, List<Book>>(
+  BooksNotifier.new,
+);

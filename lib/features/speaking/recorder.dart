@@ -61,7 +61,9 @@ class RecordPackageRecorder implements SpeechRecorder {
   final _pcm = BytesBuilder(copy: false);
 
   Future<Directory> get _dir async {
-    final d = _root ??= Directory('${(await getApplicationSupportDirectory()).path}/recordings');
+    final d = _root ??= Directory(
+      '${(await getApplicationSupportDirectory()).path}/recordings',
+    );
     await d.create(recursive: true);
     return d;
   }
@@ -72,8 +74,13 @@ class RecordPackageRecorder implements SpeechRecorder {
   @override
   Future<void> start() async {
     _pcm.clear();
-    final stream = await _recorder.startStream(const RecordConfig(
-        encoder: AudioEncoder.pcm16bits, sampleRate: _sampleRate, numChannels: 1));
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: _sampleRate,
+        numChannels: 1,
+      ),
+    );
     _sub = stream.listen(_pcm.add);
   }
 
@@ -84,7 +91,9 @@ class RecordPackageRecorder implements SpeechRecorder {
     _sub = null;
     final pcm = _pcm.takeBytes();
     if (pcm.length < _sampleRate) return null; // under half a second
-    final file = File('${(await _dir).path}/take-${DateTime.now().millisecondsSinceEpoch}.wav');
+    final file = File(
+      '${(await _dir).path}/take-${DateTime.now().millisecondsSinceEpoch}.wav',
+    );
     await file.writeAsBytes(pcm16ToWav(pcm, sampleRate: _sampleRate));
     return file;
   }

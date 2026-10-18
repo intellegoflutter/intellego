@@ -3,8 +3,11 @@ import 'package:intellego/features/alignment/sentence_aligner.dart';
 
 // Synthetic parallel text: sentence i shares a unique vocabulary between the
 // "Russian" and "Ukrainian" version.
-String ru(int i) => 'Слово${_w(i)} сказало ${_w(i + 1)} каждому ${_w(i + 2)} человеку.';
-String uk(int i) => 'Слово${_w(i)} сказало ${_w(i + 1)} кожному ${_w(i + 2)} чоловіку.';
+String ru(int i) =>
+    'Слово${_w(i)} сказало ${_w(i + 1)} каждому ${_w(i + 2)} человеку.';
+String uk(int i) =>
+    'Слово${_w(i)} сказало ${_w(i + 1)} кожному ${_w(i + 2)} чоловіку.';
+
 /// Unique 5-letter word per index (the aligner compares 4-letter stems).
 String _w(int i) {
   const letters = 'абвгдежзклмнопрстуфхцчшщ';
@@ -14,7 +17,8 @@ String _w(int i) {
     b.write(letters[n % letters.length]);
     n ~/= letters.length;
   }
-  return '$b' 'а';
+  return '$b'
+      'а';
 }
 
 void main() {
@@ -22,7 +26,10 @@ void main() {
     final a = [for (var i = 0; i < 60; i++) ru(i * 3)];
     final b = [for (var i = 0; i < 60; i++) uk(i * 3)];
     final r = alignSentences(a, b);
-    expect(r.beads.every((x) => x.ruTo - x.ruFrom == 1 && x.ukTo - x.ukFrom == 1), isTrue);
+    expect(
+      r.beads.every((x) => x.ruTo - x.ruFrom == 1 && x.ukTo - x.ukFrom == 1),
+      isTrue,
+    );
     expect(r.beads.length, 60);
   });
 
@@ -30,7 +37,9 @@ void main() {
     final a = [for (var i = 0; i < 50; i++) ru(i * 3)];
     final b = [for (var i = 0; i < 80; i++) uk(i * 3)];
     final r = alignSentences(a, b);
-    final matched = r.beads.where((x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom);
+    final matched = r.beads.where(
+      (x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom,
+    );
     for (final x in matched.take(50)) {
       expect(x.ukFrom, x.ruFrom);
     }
@@ -41,7 +50,9 @@ void main() {
     final b = <String>[];
     for (var i = 0; i < 40; i++) {
       if (i == 20) {
-        b..add('Слово${_w(60)} сказало ${_w(61)}.')..add('Кожному ${_w(62)} чоловіку.');
+        b
+          ..add('Слово${_w(60)} сказало ${_w(61)}.')
+          ..add('Кожному ${_w(62)} чоловіку.');
       } else {
         b.add(uk(i * 3));
       }
@@ -55,9 +66,14 @@ void main() {
   test('a passage missing from the audio is skipped, the text after it stays aligned', () {
     final a = [for (var i = 0; i < 400; i++) ru(i * 3)];
     // The audio lacks Russian sentences 150..229.
-    final b = [for (var i = 0; i < 400; i++) if (i < 150 || i >= 230) uk(i * 3)];
+    final b = [
+      for (var i = 0; i < 400; i++)
+        if (i < 150 || i >= 230) uk(i * 3),
+    ];
     final r = alignSentences(a, b);
-    for (final x in r.beads.where((x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom)) {
+    for (final x in r.beads.where(
+      (x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom,
+    )) {
       if (x.ruFrom >= 232) expect(x.ukFrom, x.ruFrom - 80, reason: '$x');
       if (x.ruFrom < 148) expect(x.ukFrom, x.ruFrom, reason: '$x');
     }
@@ -70,10 +86,12 @@ void main() {
         if (i == 150)
           for (var k = 0; k < 90; k++) uk(9000 + k * 3),
         uk(i * 3),
-      ]
+      ],
     ];
     final r = alignSentences(a, b);
-    for (final x in r.beads.where((x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom)) {
+    for (final x in r.beads.where(
+      (x) => x.ruTo > x.ruFrom && x.ukTo > x.ukFrom,
+    )) {
       if (x.ruFrom >= 152) expect(x.ukFrom, x.ruFrom + 90, reason: '$x');
       if (x.ruFrom < 148) expect(x.ukFrom, x.ruFrom, reason: '$x');
     }

@@ -28,14 +28,18 @@ class GigaAmRecognizer implements SpeechRecognizer {
   Future<void>? _loading;
 
   Future<void> _load() => _loading ??= () async {
-        try {
-          _tokens = parseTokens(await File('${modelDir.path}/tokens.txt').readAsString());
-          _session = await OnnxRuntime().createSession('${modelDir.path}/model.int8.onnx');
-        } catch (e) {
-          _loading = null;
-          throw StateError('Could not load the speech model: $e');
-        }
-      }();
+    try {
+      _tokens = parseTokens(
+        await File('${modelDir.path}/tokens.txt').readAsString(),
+      );
+      _session = await OnnxRuntime().createSession(
+        '${modelDir.path}/model.int8.onnx',
+      );
+    } catch (e) {
+      _loading = null;
+      throw StateError('Could not load the speech model: $e');
+    }
+  }();
 
   @override
   Future<String> transcribe(File wav) async {
@@ -46,16 +50,31 @@ class GigaAmRecognizer implements SpeechRecognizer {
     final features = await compute(_featuresOf, wav.path);
     if (features.frames < 4) return '';
 
-    final input = await OrtValue.fromList(features.data, [1, gigaMels, features.frames]);
-    final lengths = await OrtValue.fromList(Int64List.fromList([features.frames]), [1]);
+    final input = await OrtValue.fromList(features.data, [
+      1,
+      gigaMels,
+      features.frames,
+    ]);
+    final lengths = await OrtValue.fromList(
+      Int64List.fromList([features.frames]),
+      [1],
+    );
     Map<String, OrtValue>? outputs;
     try {
-      outputs = await session.run({'features': input, 'feature_lengths': lengths});
+      outputs = await session.run({
+        'features': input,
+        'feature_lengths': lengths,
+      });
       final out = outputs['log_probs'] ?? outputs.values.first;
       final flat = await out.asFlattenedList();
       final vocab = out.shape.last;
       final frames = out.shape[out.shape.length - 2];
-      return ctcGreedyDecode([for (final v in flat) (v as num).toDouble()], frames, vocab, tokens);
+      return ctcGreedyDecode(
+        [for (final v in flat) (v as num).toDouble()],
+        frames,
+        vocab,
+        tokens,
+      );
     } finally {
       await input.dispose();
       await lengths.dispose();

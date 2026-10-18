@@ -3,17 +3,24 @@ import 'pronunciation_comparer.dart';
 /// Turns a [Comparison] into advice for the learner. The local writer needs
 /// no network; an LLM-backed one can implement the same interface.
 abstract class FeedbackWriter {
-  Future<String> write({required String accented, required Comparison comparison});
+  Future<String> write({
+    required String accented,
+    required Comparison comparison,
+  });
 }
 
 class LocalFeedbackWriter implements FeedbackWriter {
   const LocalFeedbackWriter();
 
-  static const stressNote = 'The recognizer cannot tell a wrong stress from a right one, '
+  static const stressNote =
+      'The recognizer cannot tell a wrong stress from a right one, '
       'so check the stress marks yourself.';
 
   @override
-  Future<String> write({required String accented, required Comparison comparison}) async {
+  Future<String> write({
+    required String accented,
+    required Comparison comparison,
+  }) async {
     final lines = <String>[];
     if (comparison.perfect) {
       lines.add('Every word was recognised. $stressNote');
@@ -27,7 +34,9 @@ class LocalFeedbackWriter implements FeedbackWriter {
           lines.add('• ${w.expected}: not heard.${_stress(w.expected!)}');
         case WordStatus.misheard:
           final how = w.nearMiss ? 'almost, heard' : 'heard';
-          lines.add('• ${w.expected}: $how “${w.heard}”.${_stress(w.expected!)}');
+          lines.add(
+            '• ${w.expected}: $how “${w.heard}”.${_stress(w.expected!)}',
+          );
         case WordStatus.extra:
           lines.add('• Extra word “${w.heard}”.');
         case WordStatus.correct:

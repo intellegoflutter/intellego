@@ -18,7 +18,8 @@ Float64List melFilterBank() {
   double melToHz(double m) => 700 * (math.pow(10, m / 2595) - 1);
   final mMin = hzToMel(0), mMax = hzToMel(gigaSampleRate / 2);
   final fPts = [
-    for (var i = 0; i < gigaMels + 2; i++) melToHz(mMin + (mMax - mMin) * i / (gigaMels + 1))
+    for (var i = 0; i < gigaMels + 2; i++)
+      melToHz(mMin + (mMax - mMin) * i / (gigaMels + 1)),
   ];
   final fb = Float64List(_bins * gigaMels);
   for (var k = 0; k < _bins; k++) {

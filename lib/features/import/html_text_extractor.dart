@@ -9,8 +9,18 @@ class ExtractedText {
 }
 
 const _noiseTags = [
-  'script', 'style', 'noscript', 'nav', 'header', 'footer', 'aside', 'form',
-  'iframe', 'svg', 'button', 'select',
+  'script',
+  'style',
+  'noscript',
+  'nav',
+  'header',
+  'footer',
+  'aside',
+  'form',
+  'iframe',
+  'svg',
+  'button',
+  'select',
 ];
 
 /// Pulls the main readable text out of an HTML page: finds the element whose
@@ -27,7 +37,8 @@ class HtmlTextExtractor {
     }
     final title = _title(doc);
     final container = _bestContainer(doc);
-    final blocks = container
+    final blocks =
+        container
             ?.querySelectorAll('p, h1, h2, h3, blockquote')
             .where((e) => !_hasBlockAncestorInside(e, container)) ??
         const <Element>[];
@@ -51,8 +62,11 @@ class HtmlTextExtractor {
     for (final p in doc.querySelectorAll('p')) {
       final parent = p.parent;
       if (parent == null) continue;
-      scores.update(parent, (v) => v + _clean(p.text).length,
-          ifAbsent: () => _clean(p.text).length);
+      scores.update(
+        parent,
+        (v) => v + _clean(p.text).length,
+        ifAbsent: () => _clean(p.text).length,
+      );
     }
     if (explicit != null && (scores[explicit] ?? 0) > 0) return explicit;
     if (scores.isEmpty) return explicit ?? doc.body;

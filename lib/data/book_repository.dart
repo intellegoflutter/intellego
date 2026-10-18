@@ -17,8 +17,11 @@ class BookRepository {
     await for (final e in _dir.list()) {
       if (e is! File || !e.path.endsWith('.json')) continue;
       try {
-        books.add(Book.fromJson(
-            jsonDecode(await e.readAsString()) as Map<String, dynamic>));
+        books.add(
+          Book.fromJson(
+            jsonDecode(await e.readAsString()) as Map<String, dynamic>,
+          ),
+        );
       } catch (_) {
         // Skip unreadable files rather than hiding the whole library.
       }

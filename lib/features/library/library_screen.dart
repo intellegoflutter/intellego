@@ -17,8 +17,9 @@ class LibraryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Intellego')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ImportScreen())),
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const ImportScreen())),
         icon: const Icon(Icons.add),
         label: const Text('Import text'),
       ),
@@ -30,8 +31,9 @@ class LibraryScreen extends ConsumerWidget {
                 child: Padding(
                   padding: EdgeInsets.all(24),
                   child: Text(
-                      'No texts yet. Import a Russian web page to start practicing.',
-                      textAlign: TextAlign.center),
+                    'No texts yet. Import a Russian web page to start practicing.',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               )
             : ListView.builder(
@@ -50,45 +52,78 @@ class LibraryScreen extends ConsumerWidget {
                     onDismissed: (_) =>
                         ref.read(booksProvider.notifier).remove(b.id),
                     child: ListTile(
-                      title: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(
+                        b.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       subtitle: Text(
-                          '${b.practicedCount}/${b.sentences.length} sentences practiced'
-                          '${b.hasAudio ? ' · audio: ${audioSummary(b)}' : ''}'),
+                        '${b.practicedCount}/${b.sentences.length} sentences practiced'
+                        '${b.hasAudio ? ' · audio: ${audioSummary(b)}' : ''}',
+                      ),
                       trailing: PopupMenuButton<String>(
                         onSelected: (v) async {
                           if (v == 'link') {
-                            Navigator.of(context).push(MaterialPageRoute<void>(
-                                builder: (_) => LinkAudioScreen(bookId: b.id)));
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => LinkAudioScreen(bookId: b.id),
+                              ),
+                            );
                           } else if (v == 'part') {
-                            final track = await pickTrack(context, b, title: 'Next part of which audiobook?');
+                            final track = await pickTrack(
+                              context,
+                              b,
+                              title: 'Next part of which audiobook?',
+                            );
                             if (track != null && context.mounted) {
-                              await Navigator.of(context).push(MaterialPageRoute<void>(
-                                  builder: (_) => LinkAudioScreen(bookId: b.id, addPartTo: track)));
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => LinkAudioScreen(
+                                    bookId: b.id,
+                                    addPartTo: track,
+                                  ),
+                                ),
+                              );
                             }
                           } else if (v == 'more') {
                             showDialog<void>(
-                                context: context,
-                                builder: (_) => AddPagesDialog(bookId: b.id));
+                              context: context,
+                              builder: (_) => AddPagesDialog(bookId: b.id),
+                            );
                           } else if (v == 'delete') {
                             ref.read(booksProvider.notifier).remove(b.id);
                           }
                         },
                         itemBuilder: (_) => [
                           PopupMenuItem(
-                              value: 'link',
-                              child: Text(b.hasAudio
+                            value: 'link',
+                            child: Text(
+                              b.hasAudio
                                   ? 'Add an audiobook (another language)…'
-                                  : 'Link audiobook (YouTube)')),
+                                  : 'Link audiobook (YouTube)',
+                            ),
+                          ),
                           if (b.hasAudio)
-                            const PopupMenuItem(value: 'part', child: Text('Add next audio part…')),
+                            const PopupMenuItem(
+                              value: 'part',
+                              child: Text('Add next audio part…'),
+                            ),
                           if (canAddPages(b))
-                            const PopupMenuItem(value: 'more', child: Text('Add more pages…')),
-                          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                            const PopupMenuItem(
+                              value: 'more',
+                              child: Text('Add more pages…'),
+                            ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete'),
+                          ),
                         ],
                       ),
                       onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                              builder: (_) => ReaderScreen(bookId: b.id))),
+                        MaterialPageRoute<void>(
+                          builder: (_) => ReaderScreen(bookId: b.id),
+                        ),
+                      ),
                     ),
                   );
                 },

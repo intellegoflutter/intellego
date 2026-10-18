@@ -39,7 +39,11 @@ class OnnxAccentuator implements Accentuator {
   static final _sentenceEnd = RegExp(r'(?<=[.!?…]["»”’)]*)\s+(?=\S)');
 
   @override
-  Future<String> accent(String text, {bool stress = true, bool yo = true}) async {
+  Future<String> accent(
+    String text, {
+    bool stress = true,
+    bool yo = true,
+  }) async {
     if (!stress && !yo) return text;
     // Models see one sentence at a time; keep paragraph breaks intact.
     final out = StringBuffer();
@@ -69,7 +73,11 @@ class OnnxAccentuator implements Accentuator {
     return split.join([for (final w in words) _render(w)]);
   }
 
-  Future<void> _restoreYo(String sentence, SplitWords split, List<String> words) async {
+  Future<void> _restoreYo(
+    String sentence,
+    SplitWords split,
+    List<String> words,
+  ) async {
     Map<int, String>? labels;
     if (sentence.toLowerCase().contains('е')) {
       labels = await _yoResolver.labelByStart(sentence.toLowerCase());
@@ -91,15 +99,21 @@ class OnnxAccentuator implements Accentuator {
       if (variants == null || words[i].contains('+')) continue;
       final marked = [
         for (var j = 0; j < words.length; j++)
-          j == i ? ' <w>${words[j]}</w> ' : words[j]
+          j == i ? ' <w>${words[j]}</w> ' : words[j],
       ];
-      final choice =
-          await _omographScorer.pick(_joinForModel(marked), variants);
+      final choice = await _omographScorer.pick(
+        _joinForModel(marked),
+        variants,
+      );
       words[i] = _matchCase(words[i], variants[choice]);
     }
   }
 
-  Future<void> _placeStress(String sentence, SplitWords split, List<String> words) async {
+  Future<void> _placeStress(
+    String sentence,
+    SplitWords split,
+    List<String> words,
+  ) async {
     final usage = await _stressUsage.labelByStart(sentence);
     for (var i = 0; i < words.length; i++) {
       final word = words[i];

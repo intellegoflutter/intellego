@@ -28,21 +28,37 @@ void main(List<String> args) {
     for (final f in args[1].split(','))
       [
         for (final c in jsonDecode(File(f).readAsStringSync()) as List)
-          Cue.fromJson(c as Map<String, dynamic>)
-      ]
+          Cue.fromJson(c as Map<String, dynamic>),
+      ],
   ];
   final ru = [
-    for (final s in const SentenceSplitter().split(pages.expand((p) => p).join('\n'))) s.text
+    for (final s in const SentenceSplitter().split(
+      pages.expand((p) => p).join('\n'),
+    ))
+      s.text,
   ];
   final uk = [
     for (final cues in parts)
-      for (final t in cuesToSentences(cues)) t.text
+      for (final t in cuesToSentences(cues)) t.text,
   ];
   stdout.writeln('ru ${ru.length} sentences, uk ${uk.length} sentences');
   final sw = Stopwatch()..start();
-  final result = alignSentences(ru, uk, skipPenalty: skip, deviationPenalty: dev, band: band,
-      tolerance: tol, polishBand: pb, polishTolerance: pt, coarseBlockChars: bc, coarseMatch: cm, coarseGap: cg);
-  stdout.writeln('aligned in ${sw.elapsedMilliseconds} ms, ${result.beads.length} beads');
+  final result = alignSentences(
+    ru,
+    uk,
+    skipPenalty: skip,
+    deviationPenalty: dev,
+    band: band,
+    tolerance: tol,
+    polishBand: pb,
+    polishTolerance: pt,
+    coarseBlockChars: bc,
+    coarseMatch: cm,
+    coarseGap: cg,
+  );
+  stdout.writeln(
+    'aligned in ${sw.elapsedMilliseconds} ms, ${result.beads.length} beads',
+  );
   final from = List<int?>.filled(ru.length, null);
   final to = List<int?>.filled(ru.length, null);
   final conf = List<double>.filled(ru.length, 0);
@@ -58,11 +74,7 @@ void main(List<String> args) {
       conf[r] = stemSimilarity(stemSet(ru[r]), u);
     }
   }
-  File(args[2]).writeAsStringSync(jsonEncode({
-    'ru': ru,
-    'uk': uk,
-    'from': from,
-    'to': to,
-    'conf': conf,
-  }));
+  File(args[2]).writeAsStringSync(
+    jsonEncode({'ru': ru, 'uk': uk, 'from': from, 'to': to, 'conf': conf}),
+  );
 }

@@ -5,8 +5,18 @@
 /// is reduced to its first [stemLength] letters. Cognates and names then
 /// collide, which is enough to find where two translations line up.
 const _fold = {
-  'і': 'и', 'ї': 'и', 'ы': 'и', 'є': 'е', 'э': 'е', 'ё': 'е', 'ґ': 'г',
-  'ъ': '', 'ь': '', '’': '', "'": '', 'ʼ': '',
+  'і': 'и',
+  'ї': 'и',
+  'ы': 'и',
+  'є': 'е',
+  'э': 'е',
+  'ё': 'е',
+  'ґ': 'г',
+  'ъ': '',
+  'ь': '',
+  '’': '',
+  "'": '',
+  'ʼ': '',
 };
 
 final _word = RegExp(r'[а-яёіїєґ]+', unicode: true);
@@ -55,21 +65,77 @@ double _sqrt(double x) {
 const cyrillicLanguages = {'ru', 'uk', 'be', 'bg', 'sr', 'mk'};
 
 /// Whether text in [language] can be compared with Russian by [stemSet].
-bool comparesDirectlyWithRussian(String language) =>
-    cyrillicLanguages.contains(language.toLowerCase().split(RegExp(r'[-_]')).first);
+bool comparesDirectlyWithRussian(String language) => cyrillicLanguages.contains(
+  language.toLowerCase().split(RegExp(r'[-_]')).first,
+);
 
 const _translit = {
-  'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 's',
-  'з': 's', 'и': 'i', 'й': 'i', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
-  'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'r', 'ц': 'k',
-  'ч': 'k', 'ш': 's', 'щ': 's', 'ы': 'i', 'э': 'e', 'ю': 'u', 'я': 'a',
+  'а': 'a',
+  'б': 'b',
+  'в': 'v',
+  'г': 'g',
+  'д': 'd',
+  'е': 'e',
+  'ё': 'e',
+  'ж': 's',
+  'з': 's',
+  'и': 'i',
+  'й': 'i',
+  'к': 'k',
+  'л': 'l',
+  'м': 'm',
+  'н': 'n',
+  'о': 'o',
+  'п': 'p',
+  'р': 'r',
+  'с': 's',
+  'т': 't',
+  'у': 'u',
+  'ф': 'f',
+  'х': 'r',
+  'ц': 'k',
+  'ч': 'k',
+  'ш': 's',
+  'щ': 's',
+  'ы': 'i',
+  'э': 'e',
+  'ю': 'u',
+  'я': 'a',
 };
 
 const _latinFold = {
-  'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'é': 'e', 'è': 'e', 'ê': 'e',
-  'ë': 'e', 'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i', 'ó': 'o', 'ò': 'o', 'ô': 'o',
-  'õ': 'o', 'ö': 'o', 'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ç': 's', 'ñ': 'n',
-  'c': 'k', 'q': 'k', 'y': 'i', 'w': 'v', 'z': 's', 'x': 's', 'j': 'i', 'h': 'r',
+  'á': 'a',
+  'à': 'a',
+  'â': 'a',
+  'ã': 'a',
+  'ä': 'a',
+  'é': 'e',
+  'è': 'e',
+  'ê': 'e',
+  'ë': 'e',
+  'í': 'i',
+  'ì': 'i',
+  'î': 'i',
+  'ï': 'i',
+  'ó': 'o',
+  'ò': 'o',
+  'ô': 'o',
+  'õ': 'o',
+  'ö': 'o',
+  'ú': 'u',
+  'ù': 'u',
+  'û': 'u',
+  'ü': 'u',
+  'ç': 's',
+  'ñ': 'n',
+  'c': 'k',
+  'q': 'k',
+  'y': 'i',
+  'w': 'v',
+  'z': 's',
+  'x': 's',
+  'j': 'i',
+  'h': 'r',
 };
 
 final _latinWord = RegExp(r'[a-záàâãäéèêëíìîïóòôõöúùûüçñ]+', unicode: true);

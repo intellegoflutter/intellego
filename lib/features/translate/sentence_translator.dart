@@ -34,11 +34,14 @@ class NoTranslator implements SentenceTranslator {
   Future<bool> isReady(String code) async => false;
 
   @override
-  Future<String> translate(String text, String code) => translateBetween(text, 'ru', code);
+  Future<String> translate(String text, String code) =>
+      translateBetween(text, 'ru', code);
 
   @override
   Future<String> translateBetween(String text, String from, String to) =>
-      Future.error(UnsupportedError('Translation is only available on Android.'));
+      Future.error(
+        UnsupportedError('Translation is only available on Android.'),
+      );
 
   @override
   Future<void> dispose() async {}
@@ -56,7 +59,9 @@ class MlKitTranslator implements SentenceTranslator {
 
   TranslateLanguage _language(String code) =>
       BCP47Code.fromRawValue(baseLanguage(code)) ??
-      (throw ArgumentError('Language "$code" cannot be translated on the device.'));
+      (throw ArgumentError(
+        'Language "$code" cannot be translated on the device.',
+      ));
 
   Future<void> _ensureModel(TranslateLanguage language) async {
     if (_ready.contains(language.bcpCode)) return;
@@ -72,7 +77,8 @@ class MlKitTranslator implements SentenceTranslator {
       await _manager.isModelDownloaded(_language(code).bcpCode);
 
   @override
-  Future<String> translate(String text, String code) => translateBetween(text, 'ru', code);
+  Future<String> translate(String text, String code) =>
+      translateBetween(text, 'ru', code);
 
   @override
   Future<String> translateBetween(String text, String from, String to) async {
@@ -94,13 +100,18 @@ class MlKitTranslator implements SentenceTranslator {
 }
 
 SentenceTranslator createSentenceTranslator() =>
-    Platform.isAndroid || Platform.isIOS ? MlKitTranslator() : const NoTranslator();
+    Platform.isAndroid || Platform.isIOS
+    ? MlKitTranslator()
+    : const NoTranslator();
 
 /// Translations that sentence [i] of [book] still lacks: language label ->
 /// translated text, for languages with a known code (only [only] if given).
 Future<Map<String, String>> missingTranslations(
-    Book book, int i, SentenceTranslator translator,
-    {String? only}) async {
+  Book book,
+  int i,
+  SentenceTranslator translator, {
+  String? only,
+}) async {
   final out = <String, String>{};
   for (final t in book.translations) {
     if (only != null && t.name != only) continue;
@@ -122,6 +133,6 @@ Book withTranslatedLines(Book book, int i, Map<String, String> lines) {
       if (lines.containsKey(t.name) && i < t.lines.length && t.lines[i].isEmpty)
         t.withLine(i, lines[t.name]!)
       else
-        t
+        t,
   ]);
 }

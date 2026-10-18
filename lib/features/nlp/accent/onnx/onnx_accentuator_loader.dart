@@ -21,8 +21,9 @@ enum OmographModelSize {
 }
 
 List<String> _id2label(String configJson) {
-  final map = (jsonDecode(configJson) as Map<String, dynamic>)['id2label']
-      as Map<String, dynamic>;
+  final map =
+      (jsonDecode(configJson) as Map<String, dynamic>)['id2label']
+          as Map<String, dynamic>;
   return [for (var i = 0; i < map.length; i++) map['$i'] as String];
 }
 
@@ -38,16 +39,16 @@ Future<OnnxAccentuator> loadOnnxAccentuator(
   String read(String path) => File('$root/$path').readAsStringSync();
 
   Future<TokenLabeler> labeler(String dir) async => TokenLabeler(
-        await OrtNnSession.open('$root/$dir/model.onnx'),
-        BertTokenizer.fromVocabText(read('$dir/vocab.txt')),
-        _id2label(read('$dir/config.json')),
-      );
+    await OrtNnSession.open('$root/$dir/model.onnx'),
+    BertTokenizer.fromVocabText(read('$dir/vocab.txt')),
+    _id2label(read('$dir/config.json')),
+  );
 
   final omographDir = 'nn_omograph/${omographSize.dirName}';
   final addedFile = File('$root/$omographDir/added_tokens.json');
   final added = addedFile.existsSync()
       ? (jsonDecode(addedFile.readAsStringSync()) as Map<String, dynamic>)
-          .cast<String, int>()
+            .cast<String, int>()
       : <String, int>{};
 
   return OnnxAccentuator(
@@ -59,8 +60,10 @@ Future<OnnxAccentuator> loadOnnxAccentuator(
     stressUsage: await labeler('nn_stress_usage_predictor'),
     omographScorer: OmographScorer(
       await OrtNnSession.open('$root/$omographDir/model.onnx'),
-      BertTokenizer.fromVocabText(read('$omographDir/vocab.txt'),
-          addedTokens: added),
+      BertTokenizer.fromVocabText(
+        read('$omographDir/vocab.txt'),
+        addedTokens: added,
+      ),
     ),
     accentPlacer: AccentPlacer(
       await OrtNnSession.open('$root/nn_accent/model.onnx'),

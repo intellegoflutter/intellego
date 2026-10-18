@@ -40,7 +40,9 @@ class FileStressDictionary implements StressDictionary {
 
   @override
   Future<int?> stressIndex(String word) async {
-    if (_firstWords.isEmpty || word.compareTo(_firstWords.first) < 0) return null;
+    if (_firstWords.isEmpty || word.compareTo(_firstWords.first) < 0) {
+      return null;
+    }
     final block = await _block(_blockFor(word));
     return block[word];
   }

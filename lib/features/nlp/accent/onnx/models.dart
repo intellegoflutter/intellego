@@ -112,7 +112,9 @@ class AccentPlacer {
         if (p[c] > p[best]) best = c;
       }
       final label = _id2label[best];
-      if (label != 'NO' && label != 'STRESS_SECONDARY' && p[best] >= _threshold) {
+      if (label != 'NO' &&
+          label != 'STRESS_SECONDARY' &&
+          p[best] >= _threshold) {
         marks.add(i - 1);
       }
     }

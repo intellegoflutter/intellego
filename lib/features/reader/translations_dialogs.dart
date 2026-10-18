@@ -32,7 +32,9 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
   Future<void> _save(List<Translation> next) async {
     final book = _find(ref, widget.bookId);
     if (book == null) return;
-    await ref.read(booksProvider.notifier).updateBook(book.withTranslations(next));
+    await ref
+        .read(booksProvider.notifier)
+        .updateBook(book.withTranslations(next));
   }
 
   void _say(String m) => ScaffoldMessenger.of(context)
@@ -42,7 +44,9 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
   Future<void> _add(Book book) async {
     final name = _newName.text.trim();
     if (name.isEmpty) return;
-    if (book.translations.any((t) => t.name.toLowerCase() == name.toLowerCase())) {
+    if (book.translations.any(
+      (t) => t.name.toLowerCase() == name.toLowerCase(),
+    )) {
       _say('"$name" already exists.');
       return;
     }
@@ -53,7 +57,12 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
     ]);
   }
 
-  Future<String?> _ask(String title, String initial, {int lines = 1, String? help}) {
+  Future<String?> _ask(
+    String title,
+    String initial, {
+    int lines = 1,
+    String? help,
+  }) {
     final c = TextEditingController(text: initial);
     return showDialog<String>(
       context: context,
@@ -65,12 +74,21 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
             controller: c,
             autofocus: true,
             maxLines: lines == 1 ? 1 : lines,
-            decoration: InputDecoration(helperText: help, border: const OutlineInputBorder()),
+            decoration: InputDecoration(
+              helperText: help,
+              border: const OutlineInputBorder(),
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, c.text), child: const Text('OK')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, c.text),
+            child: const Text('OK'),
+          ),
         ],
       ),
     ).whenComplete(c.dispose);
@@ -78,9 +96,14 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
 
   Future<void> _paste(Book book, int index) async {
     final t = book.translations[index];
-    final text = await _ask('Paste ${t.name} lines', '', lines: 12,
-        help: 'One line per Russian sentence: ${book.sentences.length} lines, '
-            'same order as copied. A blank line keeps the current text.');
+    final text = await _ask(
+      'Paste ${t.name} lines',
+      '',
+      lines: 12,
+      help:
+          'One line per Russian sentence: ${book.sentences.length} lines, '
+          'same order as copied. A blank line keeps the current text.',
+    );
     if (text == null || text.trim().isEmpty) return;
     final lines = importUkrainian(text);
     if (lines.length != book.sentences.length) {
@@ -88,63 +111,99 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
       return;
     }
     final merged = [
-      for (var i = 0; i < lines.length; i++) lines[i].isEmpty ? t.lines[i] : lines[i]
+      for (var i = 0; i < lines.length; i++)
+        lines[i].isEmpty ? t.lines[i] : lines[i],
     ];
     await _save([...book.translations]..[index] = t.copyWith(lines: merged));
-    _say('${t.name}: ${merged.where((l) => l.isNotEmpty).length} sentences filled.');
+    _say(
+      '${t.name}: ${merged.where((l) => l.isNotEmpty).length} sentences filled.',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final book = ref.watch(booksProvider).value?.where((b) => b.id == widget.bookId).firstOrNull;
+    final book = ref
+        .watch(booksProvider)
+        .value
+        ?.where((b) => b.id == widget.bookId)
+        .firstOrNull;
     if (book == null) return const SizedBox.shrink();
     return AlertDialog(
       title: const Text('Languages'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Add languages to compare while you read. Fill them sentence '
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Add languages to compare while you read. Fill them sentence '
                 'by sentence from the ⋮ menu of a sentence, or paste a whole '
-                'translation at once.'),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy Russian text (one sentence per line)'),
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(
-                    text: exportUkrainian(book.sentences.map((s) => s.text))));
-                _say('${book.sentences.length} sentences copied.');
-              },
-            ),
-            const Divider(height: 24),
-            for (var i = 0; i < book.translations.length; i++)
-              _row(book, i),
-            Wrap(spacing: 8, children: [
-              for (final (name, _) in suggestedLanguages)
-                if (!book.translations.any((t) => t.name.toLowerCase() == name.toLowerCase()))
-                  ActionChip(
-                    label: Text('+ $name'),
-                    onPressed: () => _save([
-                      ...book.translations,
-                      Translation(name: name, lines: List.filled(book.sentences.length, '')),
-                    ]),
-                  ),
-            ]),
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _newName,
-                  decoration: const InputDecoration(labelText: 'New language (e.g. English)'),
-                  onSubmitted: (_) => _add(book),
-                ),
+                'translation at once.',
               ),
-              IconButton(icon: const Icon(Icons.add), tooltip: 'Add', onPressed: () => _add(book)),
-            ]),
-          ]),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy Russian text (one sentence per line)'),
+                onPressed: () async {
+                  await Clipboard.setData(
+                    ClipboardData(
+                      text: exportUkrainian(book.sentences.map((s) => s.text)),
+                    ),
+                  );
+                  _say('${book.sentences.length} sentences copied.');
+                },
+              ),
+              const Divider(height: 24),
+              for (var i = 0; i < book.translations.length; i++) _row(book, i),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final (name, _) in suggestedLanguages)
+                    if (!book.translations.any(
+                      (t) => t.name.toLowerCase() == name.toLowerCase(),
+                    ))
+                      ActionChip(
+                        label: Text('+ $name'),
+                        onPressed: () => _save([
+                          ...book.translations,
+                          Translation(
+                            name: name,
+                            lines: List.filled(book.sentences.length, ''),
+                          ),
+                        ]),
+                      ),
+                ],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _newName,
+                      decoration: const InputDecoration(
+                        labelText: 'New language (e.g. English)',
+                      ),
+                      onSubmitted: (_) => _add(book),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Add',
+                    onPressed: () => _add(book),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 
@@ -154,7 +213,8 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
       contentPadding: EdgeInsets.zero,
       leading: Switch(
         value: t.visible,
-        onChanged: (v) => _save([...book.translations]..[i] = t.copyWith(visible: v)),
+        onChanged: (v) =>
+            _save([...book.translations]..[i] = t.copyWith(visible: v)),
       ),
       title: Text(t.name),
       subtitle: Text('${t.filled} of ${book.sentences.length} sentences'),
@@ -166,10 +226,14 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
             case 'rename':
               final name = await _ask('Rename language', t.name);
               if (name != null && name.trim().isNotEmpty) {
-                await _save([...book.translations]..[i] = t.copyWith(name: name.trim()));
+                await _save(
+                  [...book.translations]..[i] = t.copyWith(name: name.trim()),
+                );
               }
             case 'copy':
-              await Clipboard.setData(ClipboardData(text: exportUkrainian(t.lines)));
+              await Clipboard.setData(
+                ClipboardData(text: exportUkrainian(t.lines)),
+              );
               _say('${t.name} copied.');
             case 'delete':
               await _save([...book.translations]..removeAt(i));
@@ -188,16 +252,24 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
 
 /// Edit every language of one sentence.
 Future<void> editSentenceTranslations(
-    BuildContext context, WidgetRef ref, String bookId, int index) async {
+  BuildContext context,
+  WidgetRef ref,
+  String bookId,
+  int index,
+) async {
   final book = _find(ref, bookId);
   if (book == null) return;
   if (book.translations.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Add a language first (menu ⋮ → Languages).')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Add a language first (menu ⋮ → Languages).'),
+      ),
+    );
     return;
   }
   final controllers = [
-    for (final t in book.translations) TextEditingController(text: t.lines[index])
+    for (final t in book.translations)
+      TextEditingController(text: t.lines[index]),
   ];
   final saved = await showDialog<bool>(
     context: context,
@@ -206,40 +278,57 @@ Future<void> editSentenceTranslations(
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(book.sentences[index].accented,
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            for (var k = 0; k < controllers.length; k++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TextField(
-                  controller: controllers[k],
-                  autofocus: k == 0,
-                  maxLines: null,
-                  decoration: InputDecoration(
-                      labelText: book.translations[k].name,
-                      border: const OutlineInputBorder()),
-                ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                book.sentences[index].accented,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-          ]),
+              const SizedBox(height: 12),
+              for (var k = 0; k < controllers.length; k++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TextField(
+                    controller: controllers[k],
+                    autofocus: k == 0,
+                    maxLines: null,
+                    decoration: InputDecoration(
+                      labelText: book.translations[k].name,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Save'),
+        ),
       ],
     ),
   );
   if (saved == true) {
     final fresh = _find(ref, bookId);
     if (fresh != null) {
-      await ref.read(booksProvider.notifier).updateBook(fresh.withTranslations([
-        for (var k = 0; k < fresh.translations.length; k++)
-          k < controllers.length
-              ? fresh.translations[k].withLine(index, controllers[k].text)
-              : fresh.translations[k]
-      ]));
+      await ref
+          .read(booksProvider.notifier)
+          .updateBook(
+            fresh.withTranslations([
+              for (var k = 0; k < fresh.translations.length; k++)
+                k < controllers.length
+                    ? fresh.translations[k].withLine(index, controllers[k].text)
+                    : fresh.translations[k],
+            ]),
+          );
     }
   }
   for (final c in controllers) {
