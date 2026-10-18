@@ -8,6 +8,7 @@ class BookSentence {
     required this.accented,
     required this.paragraph,
     this.practiced = false,
+    this.practicedAt = 0,
   });
 
   /// Sentence as found in the source.
@@ -18,11 +19,16 @@ class BookSentence {
   final int paragraph;
   final bool practiced;
 
-  BookSentence copyWith({bool? practiced}) => BookSentence(
+  /// When [practiced] was last changed (milliseconds since the epoch, 0 =
+  /// unknown); lets two devices tell which mark is the newer.
+  final int practicedAt;
+
+  BookSentence copyWith({bool? practiced, int? practicedAt}) => BookSentence(
     text: text,
     accented: accented,
     paragraph: paragraph,
     practiced: practiced ?? this.practiced,
+    practicedAt: practicedAt ?? this.practicedAt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +36,7 @@ class BookSentence {
     'accented': accented,
     'paragraph': paragraph,
     'practiced': practiced,
+    if (practicedAt != 0) 'practicedAt': practicedAt,
   };
 
   factory BookSentence.fromJson(Map<String, dynamic> j) => BookSentence(
@@ -37,6 +44,7 @@ class BookSentence {
     accented: j['accented'] as String,
     paragraph: j['paragraph'] as int,
     practiced: j['practiced'] as bool? ?? false,
+    practicedAt: j['practicedAt'] as int? ?? 0,
   );
 }
 
@@ -121,6 +129,7 @@ class AudioTrack {
     this.alignment = const TrackAlignment(),
     this.visible = true,
     this.bridge,
+    this.updatedAt = 0,
   }) : assert(parts.length > 0);
 
   /// A track recorded in one file.
@@ -134,6 +143,7 @@ class AudioTrack {
     this.alignment = const TrackAlignment(),
     this.visible = true,
     this.bridge,
+    this.updatedAt = 0,
   }) : parts = [AudioPart(videoId: videoId, title: videoTitle, from: 0)];
 
   /// BCP-47 language code of the recording, e.g. `uk` or `pt`.
@@ -164,6 +174,10 @@ class AudioTrack {
   /// to match a language that shares no words with Russian; null when the
   /// language matches directly.
   final List<String>? bridge;
+
+  /// When the track was last changed (milliseconds since the epoch, 0 =
+  /// unknown); the newer copy wins when two devices differ.
+  final int updatedAt;
 
   /// Index into [parts] of the file that holds track sentence [index].
   int partOf(int index) {
@@ -206,6 +220,7 @@ class AudioTrack {
     bool? visible,
     List<String>? bridge,
     bool clearBridge = false,
+    int? updatedAt,
   }) => AudioTrack(
     language: language,
     label: label ?? this.label,
@@ -215,6 +230,7 @@ class AudioTrack {
     alignment: alignment ?? this.alignment,
     visible: visible ?? this.visible,
     bridge: clearBridge ? null : (bridge ?? this.bridge),
+    updatedAt: updatedAt ?? this.updatedAt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -228,6 +244,7 @@ class AudioTrack {
     ],
     'alignment': alignment.toJson(),
     if (bridge != null) 'bridge': bridge,
+    if (updatedAt != 0) 'updatedAt': updatedAt,
   };
 
   factory AudioTrack.fromJson(
@@ -261,6 +278,7 @@ class AudioTrack {
         ? (legacyAlignment ?? const TrackAlignment())
         : TrackAlignment.fromJson(j['alignment'] as Map<String, dynamic>),
     bridge: (j['bridge'] as List?)?.cast<String>(),
+    updatedAt: j['updatedAt'] as int? ?? 0,
   );
 }
 
@@ -271,6 +289,7 @@ class Translation {
     required this.name,
     required this.lines,
     this.visible = true,
+    this.stamps = const [],
   });
 
   /// Free-form label such as "English" or "Español".
@@ -278,12 +297,23 @@ class Translation {
   final List<String> lines;
   final bool visible;
 
-  Translation copyWith({String? name, List<String>? lines, bool? visible}) =>
-      Translation(
-        name: name ?? this.name,
-        lines: lines ?? this.lines,
-        visible: visible ?? this.visible,
-      );
+  /// When each line was last changed (milliseconds since the epoch); may be
+  /// shorter than [lines], missing entries mean unknown (0).
+  final List<int> stamps;
+
+  int stampAt(int i) => i < stamps.length ? stamps[i] : 0;
+
+  Translation copyWith({
+    String? name,
+    List<String>? lines,
+    bool? visible,
+    List<int>? stamps,
+  }) => Translation(
+    name: name ?? this.name,
+    lines: lines ?? this.lines,
+    visible: visible ?? this.visible,
+    stamps: stamps ?? this.stamps,
+  );
 
   Translation withLine(int i, String text) {
     final next = [...lines];
@@ -297,12 +327,14 @@ class Translation {
     'name': name,
     'visible': visible,
     'lines': lines,
+    if (stamps.any((v) => v != 0)) 'stamps': stamps,
   };
 
   factory Translation.fromJson(Map<String, dynamic> j) => Translation(
     name: j['name'] as String,
     visible: j['visible'] as bool? ?? true,
     lines: (j['lines'] as List).cast<String>(),
+    stamps: (j['stamps'] as List?)?.cast<int>() ?? const [],
   );
 }
 

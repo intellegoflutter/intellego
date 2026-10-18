@@ -3,7 +3,7 @@ import 'dart:io';
 import '../../data/book_repository.dart';
 import '../reader/reading_position.dart';
 import '../speaking/speaking_log.dart';
-import 'book_merge.dart';
+import 'book_bundle.dart';
 
 /// Where one device keeps what is synchronised.
 abstract class SyncStore {

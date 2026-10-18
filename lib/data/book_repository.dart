@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'book.dart';
+import 'book_stamps.dart';
 
 /// Stores each book as `<dir>/<id>.json`.
 class BookRepository {
@@ -47,7 +48,14 @@ class BookRepository {
   /// received from another device keeps the time it was changed there).
   /// Returns what was written.
   Future<Book> save(Book book, {bool keepStamp = false}) async {
-    final out = keepStamp ? book : book.stamped(DateTime.now());
+    final now = DateTime.now();
+    final out = keepStamp
+        ? book
+        : stampChanges(
+            await load(book.id),
+            book,
+            now.millisecondsSinceEpoch,
+          ).stamped(now);
     await _dir.create(recursive: true);
     await _file(out.id).writeAsString(jsonEncode(out.toJson()), flush: true);
     return out;

@@ -179,6 +179,15 @@ class _SyncNowDialogState extends ConsumerState<SyncNowDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_status.isNotEmpty) ...[
+                Text(
+                  _status,
+                  style: TextStyle(
+                    color: _failed ? theme.colorScheme.error : null,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               const Text(
                 'On the computer open the sync dialog and switch it on, then '
                 'enter the address and code it shows.',
@@ -206,15 +215,6 @@ class _SyncNowDialogState extends ConsumerState<SyncNowDialog> {
                   FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9 -]')),
                 ],
               ),
-              if (_status.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _status,
-                  style: TextStyle(
-                    color: _failed ? theme.colorScheme.error : null,
-                  ),
-                ),
-              ],
             ],
           ),
         ),
