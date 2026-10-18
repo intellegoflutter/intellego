@@ -79,4 +79,110 @@ void main() {
     expect(next.translations[1].lines[0], 'Ciao.');
     expect(identical(withTranslatedLines(book, 0, {}), book), isTrue);
   });
+
+  group('translateLanguage', () {
+    Book book = _book([
+      const Translation(name: 'Italian', lines: ['', '']),
+      const Translation(name: 'English', lines: ['', '']),
+    ]);
+    final saves = <Book>[];
+
+    Future<int> run(
+      _Fake fake, {
+      bool Function()? cancelled,
+      int saveEvery = 25,
+      void Function(int, int)? onProgress,
+    }) => translateLanguage(
+      bookId: 'b',
+      name: 'Italian',
+      translator: fake,
+      latest: () => book,
+      save: (b) async {
+        saves.add(b);
+        book = b;
+      },
+      cancelled: cancelled,
+      saveEvery: saveEvery,
+      onProgress: onProgress,
+    );
+
+    setUp(() {
+      saves.clear();
+      book = _book([
+        const Translation(name: 'Italian', lines: ['', '']),
+        const Translation(name: 'English', lines: ['', '']),
+      ]);
+    });
+
+    test('fills one language only and reports progress', () async {
+      final progress = <(int, int)>[];
+      final added = await run(
+        _Fake(),
+        onProgress: (d, t) => progress.add((d, t)),
+      );
+      expect(added, 2);
+      expect(book.translations[0].lines, ['[it] Привет.', '[it] Пока.']);
+      expect(book.translations[1].lines, ['', '']);
+      expect(progress.first, (0, 2));
+      expect(progress.last, (2, 2));
+      expect(saves, hasLength(1));
+    });
+
+    test('lines that are already there are not translated again', () async {
+      book = _book([
+        const Translation(name: 'Italian', lines: ['Ciao.', '']),
+      ]);
+      final fake = _Fake();
+      expect(await run(fake), 1);
+      expect(fake.calls, [('Пока.', 'it')]);
+      expect(book.translations.single.lines, ['Ciao.', '[it] Пока.']);
+    });
+
+    test('stopping keeps what was translated', () async {
+      var stop = false;
+      final fake = _Fake();
+      final added = await run(
+        fake,
+        saveEvery: 1,
+        cancelled: () => stop,
+        onProgress: (done, _) => stop = done >= 1,
+      );
+      expect(added, 1);
+      expect(book.translations[0].lines, ['[it] Привет.', '']);
+    });
+
+    test('work done before a failure is saved', () async {
+      final failing = _FailAfter(1);
+      await expectLater(run(failing), throwsStateError);
+      expect(book.translations[0].lines, ['[it] Привет.', '']);
+    });
+
+    test('a language without a known code is refused', () async {
+      book = _book([
+        const Translation(name: 'My notes', lines: ['', '']),
+      ]);
+      await expectLater(
+        translateLanguage(
+          bookId: 'b',
+          name: 'My notes',
+          translator: _Fake(),
+          latest: () => book,
+          save: (_) async {},
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+}
+
+class _FailAfter extends _Fake {
+  _FailAfter(this.ok);
+
+  int ok;
+
+  @override
+  Future<String> translateBetween(String text, String from, String to) async {
+    if (ok-- <= 0) throw StateError('model missing');
+    return super.translateBetween(text, from, to);
+  }
 }

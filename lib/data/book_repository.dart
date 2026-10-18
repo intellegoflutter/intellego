@@ -11,6 +11,19 @@ class BookRepository {
 
   File _file(String id) => File('${_dir.path}/$id.json');
 
+  /// The book [id], or null when there is none (or it cannot be read).
+  Future<Book?> load(String id) async {
+    final f = _file(id);
+    if (!await f.exists()) return null;
+    try {
+      return Book.fromJson(
+        jsonDecode(await f.readAsString()) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<Book>> loadAll() async {
     if (!await _dir.exists()) return [];
     final books = <Book>[];
@@ -30,9 +43,14 @@ class BookRepository {
     return books;
   }
 
-  Future<void> save(Book book) async {
+  /// Writes [book], stamping it as changed now unless [keepStamp] (a copy
+  /// received from another device keeps the time it was changed there).
+  /// Returns what was written.
+  Future<Book> save(Book book, {bool keepStamp = false}) async {
+    final out = keepStamp ? book : book.stamped(DateTime.now());
     await _dir.create(recursive: true);
-    await _file(book.id).writeAsString(jsonEncode(book.toJson()), flush: true);
+    await _file(out.id).writeAsString(jsonEncode(out.toJson()), flush: true);
+    return out;
   }
 
   Future<void> delete(String id) async {

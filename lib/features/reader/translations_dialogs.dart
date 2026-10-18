@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/book.dart';
 import '../translate/language_codes.dart';
+import '../translate/sentence_translator.dart';
 import 'ukrainian_text_tools.dart';
 
 Book? _find(WidgetRef ref, String id) =>
@@ -120,6 +123,90 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
     );
   }
 
+  /// Translates every empty line of [t] with the phone's offline translator,
+  /// showing progress and a way to stop; what was done so far is kept.
+  Future<void> _translateAll(Book book, Translation t) async {
+    final translator = ref.read(sentenceTranslatorProvider);
+    if (!translator.supported) {
+      _say('Offline translation is available on the phone only.');
+      return;
+    }
+    final code = languageCodeFor(t.name);
+    if (code == null) {
+      _say(
+        '"${t.name}" is not a language the phone knows; rename it (e.g. Italian).',
+      );
+      return;
+    }
+    final missing = t.lines.where((l) => l.isEmpty).length;
+    if (missing == 0) {
+      _say('${t.name} is already complete.');
+      return;
+    }
+    final progress = ValueNotifier<int>(0);
+    var cancelled = false;
+    final navigator = Navigator.of(context);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('Translating to ${t.name}'),
+          content: ValueListenableBuilder<int>(
+            valueListenable: progress,
+            builder: (context, done, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LinearProgressIndicator(
+                  value: done == 0 ? null : done / missing,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  done == 0
+                      ? 'Starting (the first time the ${t.name} model, about '
+                            '30 MB, is downloaded)…'
+                      : '$done of $missing sentences',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => cancelled = true,
+              child: const Text('Stop'),
+            ),
+          ],
+        ),
+      ),
+    );
+    String? failure;
+    var added = 0;
+    try {
+      added = await translateLanguage(
+        bookId: book.id,
+        name: t.name,
+        translator: translator,
+        latest: () => _find(ref, book.id),
+        save: (b) => ref.read(booksProvider.notifier).updateBook(b),
+        onProgress: (done, _) => progress.value = done,
+        cancelled: () => cancelled,
+      );
+    } catch (e) {
+      failure = '$e';
+    }
+    progress.dispose();
+    navigator.pop();
+    if (!mounted) return;
+    _say(
+      failure != null
+          ? '${t.name}: translation stopped ($failure).'
+          : cancelled
+          ? '${t.name}: stopped after $added sentences.'
+          : '${t.name}: $added sentences translated.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final book = ref
@@ -221,6 +308,8 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
       trailing: PopupMenuButton<String>(
         onSelected: (v) async {
           switch (v) {
+            case 'translate':
+              await _translateAll(book, t);
             case 'paste':
               await _paste(book, i);
             case 'rename':
@@ -239,15 +328,30 @@ class _LanguagesDialogState extends ConsumerState<LanguagesDialog> {
               await _save([...book.translations]..removeAt(i));
           }
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'paste', child: Text('Paste lines…')),
-          PopupMenuItem(value: 'copy', child: Text('Copy lines')),
-          PopupMenuItem(value: 'rename', child: Text('Rename')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
+        itemBuilder: (_) => [
+          if (ref.read(sentenceTranslatorProvider).supported)
+            const PopupMenuItem(
+              value: 'translate',
+              child: Text('Translate all with the phone…'),
+            ),
+          const PopupMenuItem(value: 'paste', child: Text('Paste lines…')),
+          const PopupMenuItem(value: 'copy', child: Text('Copy lines')),
+          const PopupMenuItem(value: 'rename', child: Text('Rename')),
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
     );
   }
+}
+
+/// Replaces the whole text of [controller] with the clipboard's text.
+Future<void> _pasteInto(TextEditingController controller) async {
+  final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+  if (text == null || text.isEmpty) return;
+  controller.value = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: text.length),
+  );
 }
 
 /// Edit every language of one sentence.
@@ -297,6 +401,11 @@ Future<void> editSentenceTranslations(
                     decoration: InputDecoration(
                       labelText: book.translations[k].name,
                       border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.content_paste),
+                        tooltip: 'Replace with the clipboard',
+                        onPressed: () => _pasteInto(controllers[k]),
+                      ),
                     ),
                   ),
                 ),

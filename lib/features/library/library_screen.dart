@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../reader/reader_screen.dart';
+import '../sync/sync_dialogs.dart';
 import 'add_pages_dialog.dart';
 import 'import_screen.dart';
 import 'link_audio_screen.dart';
@@ -15,7 +18,21 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final books = ref.watch(booksProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Intellego')),
+      appBar: AppBar(
+        title: const Text('Intellego'),
+        actions: [
+          IconButton(
+            icon: Icon(Platform.isAndroid ? Icons.sync : Icons.wifi_tethering),
+            tooltip: Platform.isAndroid ? 'Sync now' : 'Sync with the phone',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => Platform.isAndroid
+                  ? const SyncNowDialog()
+                  : const SyncServerDialog(),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(
           context,

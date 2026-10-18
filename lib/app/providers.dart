@@ -127,14 +127,17 @@ class BooksNotifier extends AsyncNotifier<List<Book>> {
       (await ref.watch(bookRepositoryProvider.future)).loadAll();
 
   Future<void> add(Book book) async {
-    await (await ref.read(bookRepositoryProvider.future)).save(book);
-    state = AsyncData([book, ...?state.value]);
+    final saved = await (await ref.read(bookRepositoryProvider.future))
+        .save(book);
+    state = AsyncData([saved, ...?state.value]);
   }
 
   Future<void> updateBook(Book book) async {
-    await (await ref.read(bookRepositoryProvider.future)).save(book);
+    final saved = await (await ref.read(bookRepositoryProvider.future))
+        .save(book);
     state = AsyncData([
-      for (final b in state.value ?? const <Book>[]) b.id == book.id ? book : b,
+      for (final b in state.value ?? const <Book>[])
+        b.id == saved.id ? saved : b,
     ]);
   }
 

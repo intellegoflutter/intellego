@@ -316,6 +316,7 @@ class Book {
     this.tracks = const [],
     this.translations = const [],
     this.nextPage,
+    this.updatedAt,
   });
 
   final String id;
@@ -330,6 +331,11 @@ class Book {
 
   /// loveread books: the first page that has not been imported yet.
   final int? nextPage;
+
+  /// When the book was last saved on this or another device (UTC); decides
+  /// which copy wins when two devices changed the same thing. Null for books
+  /// saved before it existed.
+  final DateTime? updatedAt;
 
   int get practicedCount => sentences.where((s) => s.practiced).length;
 
@@ -391,6 +397,7 @@ class Book {
     List<AudioTrack>? tracks,
     List<Translation>? translations,
     int? nextPage,
+    DateTime? updatedAt,
   }) => Book(
     id: id,
     title: title,
@@ -400,7 +407,10 @@ class Book {
     tracks: tracks ?? this.tracks,
     translations: translations ?? this.translations,
     nextPage: nextPage ?? this.nextPage,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
+
+  Book stamped(DateTime at) => _copy(updatedAt: at.toUtc());
 
   Book withSentences(List<BookSentence> next) => _copy(sentences: next);
 
@@ -438,6 +448,7 @@ class Book {
     'createdAt': createdAt.toIso8601String(),
     'sentences': [for (final s in sentences) s.toJson()],
     if (nextPage != null) 'nextPage': nextPage,
+    if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
     if (tracks.isNotEmpty) 'audioTracks': [for (final t in tracks) t.toJson()],
     if (translations.isNotEmpty)
       'translations': [for (final t in translations) t.toJson()],
@@ -488,6 +499,9 @@ class Book {
           Translation.fromJson(t as Map<String, dynamic>),
       ],
       nextPage: j['nextPage'] as int?,
+      updatedAt: j['updatedAt'] == null
+          ? null
+          : DateTime.parse(j['updatedAt'] as String),
     );
   }
 }

@@ -51,6 +51,18 @@ class SpeakingLog {
         (attempts[sentence] ?? const SpeakingAttempt(attempts: 0, best: 0)).add(
           score,
         );
+    await _write();
+  }
+
+  /// Replaces all results, e.g. with ones merged from another device.
+  Future<void> replaceAll(Map<int, SpeakingAttempt> next) async {
+    attempts
+      ..clear()
+      ..addAll(next);
+    await _write();
+  }
+
+  Future<void> _write() async {
     await _file.parent.create(recursive: true);
     await _file.writeAsString(
       jsonEncode({

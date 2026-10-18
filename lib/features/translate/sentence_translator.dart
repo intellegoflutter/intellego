@@ -136,3 +136,66 @@ Book withTranslatedLines(Book book, int i, Map<String, String> lines) {
         t,
   ]);
 }
+
+/// Translates every empty line of the language [name] of the book [bookId]
+/// with [translator], saving as it goes (every [saveEvery] lines and at the
+/// end, also when translating fails) so that an interrupted run keeps its
+/// work. [latest] gives the current copy of the book, so edits made meanwhile
+/// are kept. [onProgress] gets (lines done, lines to do); translating stops
+/// early once [cancelled] returns true. Returns the number of lines added.
+Future<int> translateLanguage({
+  required String bookId,
+  required String name,
+  required SentenceTranslator translator,
+  required Book? Function() latest,
+  required Future<void> Function(Book) save,
+  void Function(int done, int total)? onProgress,
+  bool Function()? cancelled,
+  int saveEvery = 25,
+}) async {
+  final start = latest();
+  if (start == null) return 0;
+  final code = languageCodeFor(name);
+  if (code == null) {
+    throw ArgumentError('"$name" is not a language the phone can translate.');
+  }
+  final t = start.translations.where((t) => t.name == name).firstOrNull;
+  if (t == null) return 0;
+  final todo = [
+    for (var i = 0; i < start.sentences.length; i++)
+      if (i < t.lines.length && t.lines[i].isEmpty) i,
+  ];
+  final pending = <int, String>{};
+  var added = 0;
+
+  Future<void> flush() async {
+    if (pending.isEmpty) return;
+    var book = latest();
+    if (book == null) return;
+    for (final e in pending.entries) {
+      book = withTranslatedLines(book!, e.key, {name: e.value});
+    }
+    pending.clear();
+    await save(book!);
+  }
+
+  try {
+    onProgress?.call(0, todo.length);
+    for (final i in todo) {
+      if (cancelled?.call() ?? false) break;
+      final text = (await translator.translate(
+        start.sentences[i].text,
+        code,
+      )).trim();
+      if (text.isNotEmpty) {
+        pending[i] = text;
+        added++;
+      }
+      onProgress?.call(added, todo.length);
+      if (pending.length >= saveEvery) await flush();
+    }
+  } finally {
+    await flush();
+  }
+  return added;
+}
