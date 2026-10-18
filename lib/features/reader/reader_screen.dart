@@ -43,6 +43,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
   int? _recordingIndex;
   int? _lastRecorded;
   int? _speakingIndex;
+  String? _speakingLanguage;
   bool _transcribing = false;
   final _translating = ValueNotifier<bool>(false);
 
@@ -281,21 +282,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
 
   // --- Russian voice -----------------------------------------------------
 
-  Future<void> _speak(Book book, int i) async {
+  /// Speaks sentence [i] of the book in Russian, or its translation in
+  /// [language] when [text] is given.
+  Future<void> _speak(int i, String text, {String language = 'ru'}) async {
     final speaker = ref.read(russianSpeakerProvider);
-    if (_speakingIndex == i) {
+    if (_speakingIndex == i && _speakingLanguage == language) {
       await speaker.stop();
       if (mounted) setState(() => _speakingIndex = null);
       return;
     }
+    await speaker.stop();
     await ref.read(segmentPlayerProvider).pause();
-    if (mounted) setState(() => _speakingIndex = i);
+    if (mounted) {
+      setState(() {
+        _speakingIndex = i;
+        _speakingLanguage = language;
+      });
+    }
     try {
-      await speaker.speak(book.sentences[i].text);
+      await speaker.speak(text, language: language);
     } catch (e) {
       _toast('$e');
     } finally {
-      if (mounted && _speakingIndex == i) setState(() => _speakingIndex = null);
+      if (mounted && _speakingIndex == i && _speakingLanguage == language) {
+        setState(() => _speakingIndex = null);
+      }
     }
   }
 
@@ -693,8 +704,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
           index: i,
           book: book,
           playing: _playing == i ? _playingTrack : null,
-          speaking: _speakingIndex == i,
-          onSpeak: () => _speak(book, i),
+          speaking: _speakingIndex == i ? _speakingLanguage : null,
+          onSpeak: (text, language) => _speak(i, text, language: language),
           recording: _recordingIndex == i,
           transcribing: _transcribing && _recordingIndex == null && _lastRecorded == i,
           best: attempts?.attempts[i],
@@ -741,9 +752,12 @@ class _SentenceTile extends StatelessWidget {
   final Book book;
   /// Index of the track whose audio of this sentence is playing, if any.
   final int? playing;
-  final bool speaking, recording, transcribing;
+  /// Language being spoken aloud for this sentence, if any.
+  final String? speaking;
+  final bool recording, transcribing;
   final SpeakingAttempt? best;
-  final VoidCallback onSpeak, onRecord, onToggle, onSync, onTranslate, onTranslateAll;
+  final void Function(String text, String language) onSpeak;
+  final VoidCallback onRecord, onToggle, onSync, onTranslate, onTranslateAll;
   final void Function(int track) onPlay, onEdit;
   final void Function(String language) onFillLanguage;
 
@@ -818,11 +832,11 @@ class _SentenceTile extends StatelessWidget {
                         WidgetSpan(
                           alignment: PlaceholderAlignment.middle,
                           child: _InlineButton(
-                            tooltip: speaking ? 'Stop' : 'Hear it in Russian (synthetic voice)',
-                            icon: speaking ? Icons.stop : Icons.volume_up,
+                            tooltip: speaking == 'ru' ? 'Stop' : 'Hear it in Russian (synthetic voice)',
+                            icon: speaking == 'ru' ? Icons.stop : Icons.volume_up,
                             background: theme.colorScheme.tertiaryContainer,
                             foreground: theme.colorScheme.onTertiaryContainer,
-                            onTap: onSpeak,
+                            onTap: () => onSpeak(s.text, 'ru'),
                           ),
                         ),
                       ]),
@@ -859,10 +873,36 @@ class _SentenceTile extends StatelessWidget {
                                         style: TextStyle(
                                             color: theme.colorScheme.outline,
                                             fontWeight: FontWeight.w600)),
-                                    TextSpan(text: t.lines[index]),
+                                    TextSpan(text: '${t.lines[index]} '),
+                                    if (languageCodeFor(t.name) != null)
+                                      WidgetSpan(
+                                        alignment: PlaceholderAlignment.middle,
+                                        child: _InlineButton(
+                                          tooltip: speaking == languageCodeFor(t.name)
+                                              ? 'Stop'
+                                              : 'Hear it in ${t.name} (synthetic voice)',
+                                          icon: speaking == languageCodeFor(t.name)
+                                              ? Icons.stop
+                                              : Icons.volume_up,
+                                          background: theme.colorScheme.secondaryContainer,
+                                          foreground: theme.colorScheme.onSecondaryContainer,
+                                          onTap: () => onSpeak(
+                                              t.lines[index], languageCodeFor(t.name)!),
+                                        ),
+                                      ),
                                   ]), style: theme.textTheme.bodyMedium),
                                 ),
                         ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Icon(
+                          s.practiced ? Icons.check_circle : Icons.radio_button_unchecked,
+                          color: s.practiced ? Colors.green : null,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -897,10 +937,6 @@ class _SentenceTile extends StatelessWidget {
                     const PopupMenuItem(
                         value: 'sync', child: Text('Sync here (audio is at this sentence)')),
                 ],
-              ),
-              Icon(
-                s.practiced ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: s.practiced ? Colors.green : null,
               ),
             ],
           ),
