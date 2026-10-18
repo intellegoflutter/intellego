@@ -11,6 +11,7 @@ import '../../app/providers.dart';
 import '../../data/book.dart';
 import '../library/add_pages_dialog.dart';
 import '../library/link_audio_screen.dart';
+import '../library/track_picker.dart';
 import '../playback/audio_downloader.dart';
 import '../speaking/asr_model_store.dart';
 import '../translate/language_codes.dart';
@@ -34,8 +35,8 @@ class ReaderScreen extends ConsumerStatefulWidget {
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBindingObserver {
-  bool _showUkrainian = true;
   int? _playing;
+  int _playingTrack = 0;
   bool _busy = false;
   double? _downloadProgress;
   int _playingPart = 0;
@@ -77,8 +78,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _play(Book book, int i) async {
-    final seg = book.audioSegmentFor(i);
+  Future<void> _play(Book book, int i, int track) async {
+    final seg = book.audioSegmentFor(i, track);
     if (seg == null) return;
     final file = await ref.read(audioFileProvider(seg.videoId).future);
     if (file == null) {
@@ -88,6 +89,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     await ref.read(russianSpeakerProvider).stop();
     setState(() {
       _playing = i;
+      _playingTrack = track;
       _playingPart = seg.part;
       _speakingIndex = null;
     });
@@ -401,25 +403,27 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
 
   /// Declares that sentence [i] is spoken where the audio is right now.
   Future<void> _syncHere(Book book, int i) async {
-    final audio = book.audio;
-    if (audio == null) return;
-    final uk = audio.indexAt(ref.read(segmentPlayerProvider).currentMs, part: _playingPart);
-    if (uk == null) {
+    final track = _playingTrack;
+    if (track >= book.tracks.length) return;
+    final audio = book.tracks[track];
+    final at = audio.indexAt(ref.read(segmentPlayerProvider).currentMs, part: _playingPart);
+    if (at == null) {
       _toast('Play the audio first, then choose "Sync here".');
       return;
     }
     final anchors = [
       for (final a in audio.anchors)
         if (a.$1 != i) a,
-      (i, uk),
+      (i, at),
     ];
-    await _realign(book, anchors);
+    await _realign(book, track, anchors);
   }
 
-  Future<void> _realign(Book book, List<(int, int)> anchors) async {
+  Future<void> _realign(Book book, int track, List<(int, int)> anchors) async {
     setState(() => _busy = true);
     try {
-      final relinked = await ref.read(audioLinkerProvider).relink(book, anchors: anchors);
+      final relinked = await ref.read(audioLinkerProvider).relink(book,
+          trackIndex: track < 0 ? null : track, anchors: track < 0 ? null : anchors);
       await ref.read(booksProvider.notifier).updateBook(relinked);
     } catch (e) {
       _toast('Alignment failed: $e');
@@ -428,18 +432,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _editUkrainian(Book book, int i) async {
-    final s = book.sentences[i];
-    final audio = book.audio;
-    if (audio == null || !s.hasAudio) return;
+  Future<void> _editTrackText(Book book, int i, int track) async {
+    if (!book.hasAudioAt(i, track)) return;
+    final audio = book.tracks[track];
+    final from = audio.alignment.from[i]!, to = audio.alignment.to[i]!;
     final controllers = [
-      for (var q = s.ukFrom!; q < s.ukTo!; q++)
-        TextEditingController(text: audio.sentences[q].text)
+      for (var q = from; q < to; q++) TextEditingController(text: audio.sentences[q].text)
     ];
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Ukrainian'),
+        title: Text('Edit ${audio.label}'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             for (final c in controllers)
@@ -458,28 +461,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
     if (saved == true) {
       final next = [...audio.sentences];
       for (var k = 0; k < controllers.length; k++) {
-        next[s.ukFrom! + k] = next[s.ukFrom! + k].copyWith(text: controllers[k].text.trim());
+        next[from + k] = next[from + k].copyWith(text: controllers[k].text.trim());
       }
-      await ref.read(booksProvider.notifier).updateBook(book.withAudio(audio.copyWith(sentences: next)));
+      // Edited text no longer matches the cached translation used for matching.
+      await ref.read(booksProvider.notifier).updateBook(
+          book.withTrack(audio.copyWith(sentences: next), index: track));
     }
     for (final c in controllers) {
       c.dispose();
     }
   }
 
-  Future<void> _copyUkrainian(Book book) async {
+  Future<void> _copyTrackText(Book book, int track) async {
+    final audio = book.tracks[track];
     await Clipboard.setData(
-        ClipboardData(text: exportUkrainian(book.audio!.sentences.map((e) => e.text))));
-    _toast('${book.audio!.sentences.length} Ukrainian sentences copied, one per line.');
+        ClipboardData(text: exportUkrainian(audio.sentences.map((e) => e.text))));
+    _toast('${audio.sentences.length} ${audio.label} sentences copied, one per line.');
   }
 
-  Future<void> _pasteUkrainian(Book book) async {
-    final audio = book.audio!;
+  Future<void> _pasteTrackText(Book book, int track) async {
+    final audio = book.tracks[track];
     final controller = TextEditingController();
     final text = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Paste corrected Ukrainian'),
+        title: Text('Paste corrected ${audio.label}'),
         content: SizedBox(
           width: 500,
           child: TextField(
@@ -515,16 +521,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
             startMs: audio.sentences[k].startMs,
             endMs: audio.sentences[k].endMs)
     ];
-    final updated = book.withAudio(audio.copyWith(sentences: next));
+    final updated = book.withTrack(audio.copyWith(sentences: next, clearBridge: true), index: track);
     await ref.read(booksProvider.notifier).updateBook(updated);
-    await _realign(updated, audio.anchors);
+    await _realign(updated, track, audio.anchors);
   }
+
+  Future<void> _setTrackVisible(Book book, int track, bool visible) => ref
+      .read(booksProvider.notifier)
+      .updateBook(book.withTrack(book.tracks[track].copyWith(visible: visible), index: track));
 
   @override
   Widget build(BuildContext context) {
     final book = ref.watch(booksProvider).value?.where((b) => b.id == widget.bookId).firstOrNull;
     if (book == null) return Scaffold(appBar: AppBar(), body: const SizedBox.shrink());
-    final hasAudio = book.audio != null;
+    final hasAudio = book.hasAudio;
     return Scaffold(
       appBar: AppBar(
         title: Text(book.title, overflow: TextOverflow.ellipsis),
@@ -537,10 +547,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
                   builder: (_) => LinkAudioScreen(bookId: book.id))),
             ),
           if (hasAudio)
-            IconButton(
-              tooltip: _showUkrainian ? 'Hide Ukrainian' : 'Show Ukrainian',
-              icon: Icon(_showUkrainian ? Icons.visibility : Icons.visibility_off),
-              onPressed: () => setState(() => _showUkrainian = !_showUkrainian),
+            PopupMenuButton<int>(
+              tooltip: 'Audiobook languages shown',
+              icon: Icon(book.tracks.any((t) => t.visible)
+                  ? Icons.visibility
+                  : Icons.visibility_off),
+              onSelected: (k) => _setTrackVisible(book, k, !book.tracks[k].visible),
+              itemBuilder: (_) => [
+                for (var k = 0; k < book.tracks.length; k++)
+                  CheckedPopupMenuItem<int>(
+                    value: k,
+                    checked: book.tracks[k].visible,
+                    child: Text(book.tracks[k].label),
+                  ),
+              ],
             ),
           PopupMenuButton<String>(
             onSelected: (v) async {
@@ -557,28 +577,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
                   await Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => LinkAudioScreen(bookId: book.id)));
                 case 'part':
-                  await Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => LinkAudioScreen(bookId: book.id, addPart: true)));
+                  final t = await pickTrack(context, book, title: 'Next part of which audiobook?');
+                  if (t != null && context.mounted) {
+                    await Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => LinkAudioScreen(bookId: book.id, addPartTo: t)));
+                  }
                 case 'copy':
-                  await _copyUkrainian(book);
+                  final t = await pickTrack(context, book, title: 'Copy which language?');
+                  if (t != null) await _copyTrackText(book, t);
                 case 'paste':
-                  await _pasteUkrainian(book);
+                  final t = await pickTrack(context, book, title: 'Paste into which language?');
+                  if (t != null) await _pasteTrackText(book, t);
                 case 'realign':
-                  await _realign(book, book.audio!.anchors);
+                  await _realign(book, -1, const []);
                 case 'clear':
-                  await _realign(book, const []);
+                  final t = await pickTrack(context, book, title: 'Forget sync points of?');
+                  if (t != null) await _realign(book, t, const []);
               }
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'languages', child: Text('Languages…')),
               if (canAddPages(book))
                 const PopupMenuItem(value: 'more', child: Text('Add more pages…')),
-              PopupMenuItem(value: 'link', child: Text(hasAudio ? 'Change audiobook' : 'Link audiobook')),
-              if (hasAudio)
-                const PopupMenuItem(value: 'part', child: Text('Add next audio part…')),
+              PopupMenuItem(
+                  value: 'link',
+                  child: Text(hasAudio ? 'Add an audiobook (another language)…' : 'Link audiobook')),
               if (hasAudio) ...const [
-                PopupMenuItem(value: 'copy', child: Text('Copy Ukrainian text')),
-                PopupMenuItem(value: 'paste', child: Text('Paste corrected Ukrainian')),
+                PopupMenuItem(value: 'part', child: Text('Add next audio part…')),
+                PopupMenuItem(value: 'copy', child: Text('Copy audiobook text')),
+                PopupMenuItem(value: 'paste', child: Text('Paste corrected audiobook text')),
                 PopupMenuItem(value: 'realign', child: Text('Re-align')),
                 PopupMenuItem(value: 'clear', child: Text('Forget sync points')),
               ],
@@ -603,11 +630,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
   }
 
   Widget _audioBanner(Book book) {
-    final audio = book.audio!;
-    final missing = <int>[];
-    for (var k = 0; k < audio.parts.length; k++) {
-      final file = ref.watch(audioFileProvider(audio.parts[k].videoId));
-      if (!file.isLoading && file.value == null) missing.add(k);
+    // (track, part) pairs whose audio file is not on the device.
+    final missing = <(int, int)>[];
+    for (var t = 0; t < book.tracks.length; t++) {
+      for (var k = 0; k < book.tracks[t].parts.length; k++) {
+        final file = ref.watch(audioFileProvider(book.tracks[t].parts[k].videoId));
+        if (!file.isLoading && file.value == null) missing.add((t, k));
+      }
     }
     if (missing.isEmpty) return const SizedBox.shrink();
     final downloading = _downloadProgress != null;
@@ -616,12 +645,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          for (final k in missing) ...[
-            Text(audio.parts.length == 1
-                ? 'The audio is not on this device yet. Playing sentences '
-                    'needs the audiobook file.'
-                : 'Part ${k + 1} of the audio is not on this device yet'
-                    '${audio.parts[k].title.isEmpty ? '' : ': ${audio.parts[k].title}'}.'),
+          for (final (t, k) in missing) ...[
+            Builder(builder: (context) {
+              final track = book.tracks[t];
+              final part = track.parts[k];
+              final what = book.tracks.length == 1 && track.parts.length == 1
+                  ? 'The audio'
+                  : '${track.label}${track.parts.length > 1 ? ', part ${k + 1}' : ''}';
+              return Text('$what is not on this device yet. Playing sentences needs the '
+                  'audiobook file${part.title.isEmpty ? '' : ' (${part.title})'}.');
+            }),
             const SizedBox(height: 8),
             if (downloading)
               LinearProgressIndicator(
@@ -632,15 +665,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
                   FilledButton.icon(
                     icon: const Icon(Icons.download),
                     label: const Text('Download from YouTube'),
-                    onPressed: () => _downloadAudio(audio.parts[k].videoId),
+                    onPressed: () => _downloadAudio(book.tracks[t].parts[k].videoId),
                   ),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.folder_open),
                   label: const Text('Choose audio file…'),
-                  onPressed: () => _pickAudio(audio.parts[k].videoId),
+                  onPressed: () => _pickAudio(book.tracks[t].parts[k].videoId),
                 ),
               ]),
-            if (k != missing.last) const SizedBox(height: 12),
+            if ((t, k) != missing.last) const SizedBox(height: 12),
           ],
         ]),
       ),
@@ -659,17 +692,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> with WidgetsBinding
         itemBuilder: (context, i) => _SentenceTile(
           index: i,
           book: book,
-          showUkrainian: _showUkrainian,
-          playing: _playing == i,
+          playing: _playing == i ? _playingTrack : null,
           speaking: _speakingIndex == i,
           onSpeak: () => _speak(book, i),
           recording: _recordingIndex == i,
           transcribing: _transcribing && _recordingIndex == null && _lastRecorded == i,
           best: attempts?.attempts[i],
           onRecord: () => _record(book, i),
-          onPlay: () => _play(book, i),
+          onPlay: (track) => _play(book, i, track),
           onToggle: () => _toggle(book, i),
-          onEdit: () => _editUkrainian(book, i),
+          onEdit: (track) => _editTrackText(book, i, track),
           onSync: () => _syncHere(book, i),
           onTranslate: () => editSentenceTranslations(context, ref, book.id, i),
           onFillLanguage: (name) => _fillOrEdit(book, i, name),
@@ -689,7 +721,6 @@ class _SentenceTile extends StatelessWidget {
   const _SentenceTile({
     required this.index,
     required this.book,
-    required this.showUkrainian,
     required this.playing,
     required this.speaking,
     required this.onSpeak,
@@ -708,20 +739,63 @@ class _SentenceTile extends StatelessWidget {
 
   final int index;
   final Book book;
-  final bool showUkrainian;
-  final bool playing, speaking, recording, transcribing;
+  /// Index of the track whose audio of this sentence is playing, if any.
+  final int? playing;
+  final bool speaking, recording, transcribing;
   final SpeakingAttempt? best;
-  final VoidCallback onSpeak, onRecord, onPlay, onToggle, onEdit, onSync, onTranslate, onTranslateAll;
+  final VoidCallback onSpeak, onRecord, onToggle, onSync, onTranslate, onTranslateAll;
+  final void Function(int track) onPlay, onEdit;
   final void Function(String language) onFillLanguage;
+
+  /// Colours that tell the audiobook languages apart.
+  static const _trackColors = [
+    Color(0xFF3F51B5), // indigo
+    Color(0xFF00897B), // teal
+    Color(0xFFE65100), // deep orange
+    Color(0xFF8E24AA), // purple
+    Color(0xFF6D4C41), // brown
+  ];
+
+  Widget _trackLine(BuildContext context, int k) {
+    final theme = Theme.of(context);
+    final track = book.tracks[k];
+    final color = _trackColors[k % _trackColors.length];
+    final weak = (book.confidenceAt(index, k) ?? 1) < 0.08;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(
+              text: '${track.language.toUpperCase()}  ',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: color, fontWeight: FontWeight.w700)),
+          TextSpan(
+              text: '${book.trackTextFor(index, k)} ',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  color: weak ? theme.colorScheme.outline : color,
+                  fontStyle: weak ? FontStyle.italic : null)),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _InlineButton(
+              tooltip: 'Play the ${track.label} audiobook',
+              icon: playing == k ? Icons.graphic_eq : Icons.play_arrow,
+              background: Colors.transparent,
+              foreground: color,
+              outlined: true,
+              onTap: () => onPlay(k),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final s = book.sentences[index];
-    final uk = book.ukrainianFor(index);
-    final weak = s.confidence != null && s.confidence! < 0.08;
     return Material(
-      color: playing ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4) : null,
+      color: playing != null ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4) : null,
       child: InkWell(
         onTap: onToggle,
         child: Padding(
@@ -762,40 +836,9 @@ class _SentenceTile extends StatelessWidget {
                             style: theme.textTheme.labelSmall
                                 ?.copyWith(color: theme.colorScheme.outline)),
                       ),
-                    if (s.hasAudio && (showUkrainian && uk != null || !showUkrainian))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text.rich(
-                          TextSpan(children: [
-                            if (showUkrainian && uk != null)
-                              TextSpan(
-                                  text: '$uk ',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: weak
-                                          ? theme.colorScheme.outline
-                                          : theme.colorScheme.secondary,
-                                      fontStyle: weak ? FontStyle.italic : null)),
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: _InlineButton(
-                                tooltip: 'Play the audiobook',
-                                icon: playing ? Icons.graphic_eq : Icons.play_arrow,
-                                background: Colors.transparent,
-                                foreground: theme.colorScheme.primary,
-                                outlined: true,
-                                onTap: onPlay,
-                              ),
-                            ),
-                          ]),
-                        ),
-                      )
-                    else if (showUkrainian && uk != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(uk,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.secondary)),
-                      ),
+                    for (var k = 0; k < book.tracks.length; k++)
+                      if (book.tracks[k].visible && book.hasAudioAt(index, k))
+                        _trackLine(context, k),
                     for (final t in book.translations)
                       if (t.visible)
                         Padding(
@@ -837,7 +880,7 @@ class _SentenceTile extends StatelessWidget {
                 ),
               PopupMenuButton<String>(
                 onSelected: (v) {
-                  if (v == 'edit') onEdit();
+                  if (v.startsWith('edit')) onEdit(int.parse(v.substring(4)));
                   if (v == 'sync') onSync();
                   if (v == 'translate') onTranslate();
                   if (v == 'translateAll') onTranslateAll();
@@ -847,10 +890,12 @@ class _SentenceTile extends StatelessWidget {
                   if (book.translations.isNotEmpty)
                     const PopupMenuItem(
                         value: 'translateAll', child: Text('Translate with the phone (offline)')),
-                  if (book.audio != null && s.hasAudio)
-                    const PopupMenuItem(value: 'edit', child: Text('Edit Ukrainian')),
-                  if (book.audio != null)
-                    const PopupMenuItem(value: 'sync', child: Text('Sync here (audio is at this sentence)')),
+                  for (var k = 0; k < book.tracks.length; k++)
+                    if (book.hasAudioAt(index, k))
+                      PopupMenuItem(value: 'edit$k', child: Text('Edit ${book.tracks[k].label}')),
+                  if (book.hasAudio)
+                    const PopupMenuItem(
+                        value: 'sync', child: Text('Sync here (audio is at this sentence)')),
                 ],
               ),
               Icon(

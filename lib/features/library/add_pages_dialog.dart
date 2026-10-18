@@ -77,9 +77,9 @@ class _AddPagesDialogState extends ConsumerState<AddPagesDialog> {
         _progress = null;
       });
       await ref.read(booksProvider.notifier).updateBook(updated);
-      if (updated.audio != null) {
+      if (updated.hasAudio) {
         setState(() {
-          _status = 'Re-aligning the audio with the longer text…';
+          _status = 'Re-aligning the audiobooks with the longer text…';
           _progress = null;
         });
         updated = await ref.read(audioLinkerProvider).relink(updated);

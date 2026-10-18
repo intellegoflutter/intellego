@@ -42,68 +42,180 @@ void main() {
     expect(importUkrainian('а\r\n\nб\n\n'), ['а', '', 'б']);
   });
 
-  test('book json keeps audio link and alignment', () {
+  AudioTrack track({String language = 'uk', String label = 'Ukrainian', TrackAlignment? alignment}) =>
+      AudioTrack.single(
+        language: language,
+        label: label,
+        videoId: 'v',
+        videoTitle: 'T',
+        sentences: const [
+          TimedText(text: 'x', startMs: 0, endMs: 100),
+          TimedText(text: 'y', startMs: 100, endMs: 250),
+        ],
+        anchors: const [(0, 0)],
+        alignment: alignment ??
+            const TrackAlignment(from: [0, null], to: [2, null], confidence: [0.5, null]),
+      );
+
+  test('book json keeps the audio tracks and their alignment', () {
     final book = Book(
       id: '1',
       title: 't',
       createdAt: DateTime(2026),
       sentences: const [
-        BookSentence(text: 'a', accented: 'a', paragraph: 0, ukFrom: 0, ukTo: 2, confidence: 0.5),
+        BookSentence(text: 'a', accented: 'a', paragraph: 0),
         BookSentence(text: 'b', accented: 'b', paragraph: 0),
       ],
-      audio: LinkedAudio.single(
-        videoId: 'v',
-        videoTitle: 'T',
-        sentences: [
-          TimedText(text: 'x', startMs: 0, endMs: 100),
-          TimedText(text: 'y', startMs: 100, endMs: 250),
-        ],
-        anchors: [(0, 0)],
-      ),
+      tracks: [track()],
     );
     final back = Book.fromJson(book.toJson());
-    expect(back.ukrainianFor(0), 'x y');
+    expect(back.trackTextFor(0), 'x y');
     expect(back.audioRangeFor(0), (0, 250));
     expect(back.audioRangeFor(1), isNull);
-    expect(back.sentenceAt(120), 0);
-    expect(back.audio!.anchors, [(0, 0)]);
-    expect(back.audio!.indexAt(150), 1);
-    expect(back.audio!.indexAt(-5), isNull);
+    expect(back.hasAudioAt(1), isFalse);
+    expect(back.confidenceAt(0), closeTo(0.5, 1e-9));
+    expect(back.tracks.single.anchors, [(0, 0)]);
+    expect(back.tracks.single.language, 'uk');
+    expect(back.tracks.single.indexAt(150), 1);
+    expect(back.tracks.single.indexAt(-5), isNull);
   });
 
-  test('AudioLinker links sentences to captions', () async {
-    final ru = [
-      'Первая фраза про лесную поляну.',
-      'Вторая фраза про речную долину.',
-      'Третья фраза про горную вершину.',
-    ];
+  test('books saved before audio tracks keep their Ukrainian audiobook', () {
+    final legacy = {
+      'id': 'old',
+      'title': 'Old',
+      'createdAt': '2026-01-01T00:00:00.000',
+      'sentences': [
+        {'text': 'a', 'accented': 'a', 'paragraph': 0, 'ukFrom': 0, 'ukTo': 2, 'confidence': 0.5},
+        {'text': 'b', 'accented': 'b', 'paragraph': 0},
+        {'text': 'c', 'accented': 'c', 'paragraph': 1, 'ukFrom': 2, 'ukTo': 3, 'practiced': true},
+      ],
+      'audio': {
+        'videoId': 'v',
+        'videoTitle': 'T',
+        'sentences': [
+          {'text': 'x', 'start': 0, 'end': 100},
+          {'text': 'y', 'start': 100, 'end': 250},
+          {'text': 'z', 'start': 250, 'end': 300},
+        ],
+        'anchors': [
+          [2, 2]
+        ],
+      },
+    };
+    final book = Book.fromJson(legacy);
+    expect(book.tracks.single.language, 'uk');
+    expect(book.tracks.single.label, 'Ukrainian');
+    expect(book.tracks.single.parts.single.videoId, 'v');
+    expect(book.trackTextFor(0), 'x y');
+    expect(book.trackTextFor(1), isNull);
+    expect(book.trackTextFor(2), 'z');
+    expect(book.confidenceAt(0), 0.5);
+    expect(book.sentences[2].practiced, isTrue);
+    expect(book.tracks.single.anchors, [(2, 2)]);
+    // Saved again it uses the new format and still reads back the same.
+    final saved = book.toJson();
+    expect(saved.containsKey('audio'), isFalse);
+    expect(saved['sentences'].first.containsKey('ukFrom'), isFalse);
+    final again = Book.fromJson(saved);
+    expect(again.trackTextFor(2), 'z');
+    expect(again.audioRangeFor(0), (0, 250));
+  });
+
+  test('alignment that stops early leaves later sentences without audio', () {
     final book = Book(
       id: '1',
       title: 't',
       createdAt: DateTime(2026),
-      sentences: [
-        for (final r in ru) BookSentence(text: r, accented: r, paragraph: 0)
+      sentences: const [
+        BookSentence(text: 'a', accented: 'a', paragraph: 0),
+        BookSentence(text: 'b', accented: 'b', paragraph: 0),
+      ],
+      tracks: [track()],
+    ).appended(const [BookSentence(text: 'c', accented: 'c', paragraph: 1)]);
+    expect(book.sentences, hasLength(3));
+    expect(book.hasAudioAt(2), isFalse);
+    expect(book.trackTextFor(2), isNull);
+    expect(book.audioSegmentFor(2), isNull);
+  });
+
+  test('several tracks: each has its own text, file and visibility', () {
+    final book = Book(
+      id: '1',
+      title: 't',
+      createdAt: DateTime(2026),
+      sentences: const [BookSentence(text: 'a', accented: 'a', paragraph: 0)],
+      tracks: [
+        track(),
+        track(
+            language: 'pt',
+            label: 'Portuguese',
+            alignment: const TrackAlignment(from: [1], to: [2], confidence: [0.9])),
       ],
     );
-    final captions = VideoCaptions(
-      videoId: 'v',
-      title: 'T',
-      language: 'uk',
-      autoGenerated: true,
-      cues: const [
-        Cue(startMs: 0, durationMs: 3000, text: 'Перша фраза про лісову поляну.'),
-        Cue(startMs: 3000, durationMs: 3000, text: 'Друга фраза про річкову долину.'),
-        Cue(startMs: 6000, durationMs: 3000, text: 'Третя фраза про гірську вершину.'),
-      ],
-    );
-    final linked = await const AudioLinker().link(book, captions);
-    expect(linked.sentences.every((s) => s.hasAudio), isTrue);
+    expect(book.trackIndexOf('pt'), 1);
+    expect(book.trackIndexOf('it'), isNull);
+    expect(book.trackTextFor(0, 0), 'x y');
+    expect(book.trackTextFor(0, 1), 'y');
+    expect(book.audioSegmentFor(0, 1)!.startMs, 100);
+    final hidden = book.withTrack(book.tracks[1].copyWith(visible: false), index: 1);
+    expect(Book.fromJson(hidden.toJson()).tracks[1].visible, isFalse);
+    expect(hidden.withoutTrack(0).tracks.single.language, 'pt');
+  });
+
+  VideoCaptions captions(String id, String language, List<String> lines) => VideoCaptions(
+        videoId: id,
+        title: id,
+        language: language,
+        autoGenerated: true,
+        cues: [
+          for (var i = 0; i < lines.length; i++)
+            Cue(startMs: i * 3000, durationMs: 3000, text: lines[i])
+        ],
+      );
+
+  const ru = [
+    'Первая фраза про лесную поляну.',
+    'Вторая фраза про речную долину.',
+    'Третья фраза про горную вершину.',
+    'Четвертая фраза про морской берег.',
+  ];
+  Book russianBook() => Book(
+        id: '1',
+        title: 't',
+        createdAt: DateTime(2026),
+        sentences: [for (final r in ru) BookSentence(text: r, accented: r, paragraph: 0)],
+      );
+
+  test('AudioLinker links sentences to captions', () async {
+    final linked = await const AudioLinker().link(
+        russianBook(),
+        captions('v', 'uk', [
+          'Перша фраза про лісову поляну.',
+          'Друга фраза про річкову долину.',
+          'Третя фраза про гірську вершину.',
+        ]));
+    expect(linked.tracks.single.language, 'uk');
+    expect(linked.hasAudioAt(0) && linked.hasAudioAt(1) && linked.hasAudioAt(2), isTrue);
     expect(linked.audioRangeFor(1)!.$1, 3000);
-    expect(linked.ukrainianFor(2), 'Третя фраза про гірську вершину.');
+    expect(linked.trackTextFor(2), 'Третя фраза про гірську вершину.');
+  });
+
+  test('a second language adds a track, the same language replaces it', () async {
+    const linker = AudioLinker();
+    var book = await linker.link(russianBook(), captions('one', 'uk', ['Перша фраза про лісову поляну.']));
+    book = await linker.link(book, captions('two', 'pt-BR', ['Primeira frase sobre a clareira.']));
+    expect(book.tracks.map((t) => t.language), ['uk', 'pt']);
+    expect(book.tracks[1].label, 'Portuguese');
+    book = await linker.link(book, captions('three', 'uk', ['Друга фраза про річкову долину.']));
+    expect(book.tracks, hasLength(2));
+    expect(book.tracks[0].videoId, 'three');
   });
 
   test('a book with two audio parts: segments point at the right file', () {
-    final audio = LinkedAudio(
+    final audio = AudioTrack(
+      language: 'uk',
+      label: 'Ukrainian',
       parts: const [
         AudioPart(videoId: 'p1', title: 'one', from: 0),
         AudioPart(videoId: 'p2', title: 'two', from: 2),
@@ -114,18 +226,19 @@ void main() {
         TimedText(text: 'c', startMs: 0, endMs: 50),
         TimedText(text: 'd', startMs: 50, endMs: 90),
       ],
+      alignment: const TrackAlignment(from: [1, 2, 1], to: [2, 4, 3]),
     );
     final book = Book(
       id: '1',
       title: 't',
       createdAt: DateTime(2026),
       sentences: const [
-        BookSentence(text: 'x', accented: 'x', paragraph: 0, ukFrom: 1, ukTo: 2),
-        BookSentence(text: 'y', accented: 'y', paragraph: 0, ukFrom: 2, ukTo: 4),
+        BookSentence(text: 'x', accented: 'x', paragraph: 0),
+        BookSentence(text: 'y', accented: 'y', paragraph: 0),
         // Straddles both parts: only the piece in the first one plays.
-        BookSentence(text: 'z', accented: 'z', paragraph: 0, ukFrom: 1, ukTo: 3),
+        BookSentence(text: 'z', accented: 'z', paragraph: 0),
       ],
-      audio: audio,
+      tracks: [audio],
     );
     expect(book.audioSegmentFor(0)!.videoId, 'p1');
     final second = book.audioSegmentFor(1)!;
@@ -135,64 +248,41 @@ void main() {
     expect(audio.indexAt(60, part: 0), 0);
     expect(audio.indexAt(-1, part: 1), isNull);
     final back = Book.fromJson(book.toJson());
-    expect(back.audio!.parts.map((p) => p.videoId), ['p1', 'p2']);
-    expect(back.audio!.partOf(3), 1);
-  });
-
-  test('books saved before audio parts existed still load', () {
-    final legacy = LinkedAudio.fromJson({
-      'videoId': 'old',
-      'videoTitle': 'Old',
-      'sentences': [
-        {'text': 'x', 'start': 0, 'end': 10}
-      ],
-    });
-    expect(legacy.parts.single.videoId, 'old');
-    expect(legacy.parts.single.from, 0);
+    expect(back.tracks.single.parts.map((p) => p.videoId), ['p1', 'p2']);
+    expect(back.tracks.single.partOf(3), 1);
   });
 
   test('AudioLinker.addPart appends the next recording and keeps the first', () async {
-    final ru = [
-      'Первая фраза про лесную поляну.',
-      'Вторая фраза про речную долину.',
-      'Третья фраза про горную вершину.',
-      'Четвертая фраза про морской берег.',
-    ];
-    final book = Book(
-      id: '1',
-      title: 't',
-      createdAt: DateTime(2026),
-      sentences: [for (final r in ru) BookSentence(text: r, accented: r, paragraph: 0)],
-    );
-    VideoCaptions captions(String id, List<String> lines) => VideoCaptions(
-          videoId: id,
-          title: id,
-          language: 'uk',
-          autoGenerated: true,
-          cues: [
-            for (var i = 0; i < lines.length; i++)
-              Cue(startMs: i * 3000, durationMs: 3000, text: lines[i])
-          ],
-        );
     const linker = AudioLinker();
     var linked = await linker.link(
-        book,
-        captions('one', [
+        russianBook(),
+        captions('one', 'uk', [
           'Перша фраза про лісову поляну.',
           'Друга фраза про річкову долину.',
         ]));
     linked = await linker.addPart(
         linked,
-        captions('two', [
+        0,
+        captions('two', 'uk', [
           'Третя фраза про гірську вершину.',
           'Четверта фраза про морський берег.',
         ]));
-    expect(linked.audio!.parts.map((p) => p.videoId), ['one', 'two']);
-    expect(linked.audio!.parts[1].from, 2);
+    final t = linked.tracks.single;
+    expect(t.parts.map((p) => p.videoId), ['one', 'two']);
+    expect(t.parts[1].from, 2);
     expect(linked.audioSegmentFor(0)!.videoId, 'one');
     expect(linked.audioSegmentFor(3)!.videoId, 'two');
     expect(linked.audioSegmentFor(3)!.startMs, 3000);
-    expect(() => linker.addPart(linked, captions('two', ['Ще раз.'])),
+    expect(() => linker.addPart(linked, 0, captions('two', 'uk', ['Ще раз.'])),
         throwsA(isA<CaptionsUnavailable>()));
+  });
+
+  test('caption track choice never falls back to another language', () {
+    const tracks = [('uk', true), ('uk', false), ('en', false), ('pt', true)];
+    expect(chooseCaptionTrack(tracks, 'uk'), 1); // hand-made beats auto
+    expect(chooseCaptionTrack(tracks, 'pt'), 3);
+    expect(chooseCaptionTrack(tracks, 'it'), isNull);
+    expect(chooseCaptionTrack(tracks, null), 1);
+    expect(chooseCaptionTrack(const [], null), isNull);
   });
 }

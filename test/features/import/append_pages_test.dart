@@ -39,7 +39,7 @@ void main() {
     expect(first.nextPage, 3);
     var book = first
         .withTranslations([Translation(name: 'EN', lines: List.filled(first.sentences.length, 'x'))])
-        .withAudio(LinkedAudio.single(videoId: 'v', videoTitle: 'T', sentences: [], anchors: [(1, 2)]));
+        .withTrack(AudioTrack.single(language: 'uk', label: 'Ukrainian', videoId: 'v', videoTitle: 'T', sentences: [], anchors: [(1, 2)]));
     final before = book.sentences.length;
     requested.clear();
 
@@ -51,7 +51,7 @@ void main() {
     expect(more.sentences[before].paragraph, book.sentences.last.paragraph + 1);
     expect(more.translations.single.lines.length, more.sentences.length);
     expect(more.translations.single.lines.last, '');
-    expect(more.audio!.anchors, [(1, 2)]);
+    expect(more.tracks.single.anchors, [(1, 2)]);
   });
 
   test('legacy books without nextPage are located by paragraph count', () async {

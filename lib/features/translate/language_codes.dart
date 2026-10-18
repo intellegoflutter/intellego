@@ -7,17 +7,34 @@ String? languageCodeFor(String label) {
   return _byName[key];
 }
 
+/// Primary language of a BCP-47 code: `pt-BR` and `pt-orig` give `pt`.
+String baseLanguage(String code) =>
+    code.toLowerCase().split(RegExp(r'[-_]')).first;
+
+/// English name of the language [code] (`pt-BR` too), or the code itself
+/// when it is not known.
+String languageLabelFor(String code) {
+  final base = baseLanguage(code);
+  final names = _names[base];
+  if (names == null) return code;
+  final name = names.first;
+  return name[0].toUpperCase() + name.substring(1);
+}
+
 /// Languages offered as one-tap additions: (label, code).
 const suggestedLanguages = [
   ('English', 'en'),
   ('Italian', 'it'),
+  ('Portuguese', 'pt'),
   ('Ukrainian', 'uk'),
   ('German', 'de'),
   ('French', 'fr'),
   ('Spanish', 'es'),
+  ('Russian', 'ru'),
 ];
 
 const _names = {
+  'ru': ['russian', 'русский', 'російська', 'russo'],
   'en': ['english', 'inglese', 'английский', 'англійська'],
   'it': ['italian', 'italiano', 'итальянский', 'італійська'],
   'uk': ['ukrainian', 'українська', 'украинский', 'ucraino'],

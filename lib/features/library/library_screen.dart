@@ -6,6 +6,7 @@ import '../reader/reader_screen.dart';
 import 'add_pages_dialog.dart';
 import 'import_screen.dart';
 import 'link_audio_screen.dart';
+import 'track_picker.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -52,15 +53,18 @@ class LibraryScreen extends ConsumerWidget {
                       title: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
                           '${b.practicedCount}/${b.sentences.length} sentences practiced'
-                          '${b.audio == null ? '' : b.audio!.parts.length > 1 ? ' · audio linked (${b.audio!.parts.length} parts)' : ' · audio linked'}'),
+                          '${b.hasAudio ? ' · audio: ${audioSummary(b)}' : ''}'),
                       trailing: PopupMenuButton<String>(
-                        onSelected: (v) {
+                        onSelected: (v) async {
                           if (v == 'link') {
                             Navigator.of(context).push(MaterialPageRoute<void>(
                                 builder: (_) => LinkAudioScreen(bookId: b.id)));
                           } else if (v == 'part') {
-                            Navigator.of(context).push(MaterialPageRoute<void>(
-                                builder: (_) => LinkAudioScreen(bookId: b.id, addPart: true)));
+                            final track = await pickTrack(context, b, title: 'Next part of which audiobook?');
+                            if (track != null && context.mounted) {
+                              await Navigator.of(context).push(MaterialPageRoute<void>(
+                                  builder: (_) => LinkAudioScreen(bookId: b.id, addPartTo: track)));
+                            }
                           } else if (v == 'more') {
                             showDialog<void>(
                                 context: context,
@@ -72,10 +76,10 @@ class LibraryScreen extends ConsumerWidget {
                         itemBuilder: (_) => [
                           PopupMenuItem(
                               value: 'link',
-                              child: Text(b.audio == null
-                                  ? 'Link audiobook (YouTube)'
-                                  : 'Change audiobook')),
-                          if (b.audio != null)
+                              child: Text(b.hasAudio
+                                  ? 'Add an audiobook (another language)…'
+                                  : 'Link audiobook (YouTube)')),
+                          if (b.hasAudio)
                             const PopupMenuItem(value: 'part', child: Text('Add next audio part…')),
                           if (canAddPages(b))
                             const PopupMenuItem(value: 'more', child: Text('Add more pages…')),

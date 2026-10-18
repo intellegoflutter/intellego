@@ -8,14 +8,20 @@ import '../../app/providers.dart';
 import '../../data/book.dart';
 
 /// Pastes a YouTube link, downloads its subtitles and aligns them with the
-/// book's sentences.
+/// book's sentences: a new audiobook language, or the next part of one.
 class LinkAudioScreen extends ConsumerStatefulWidget {
-  const LinkAudioScreen({super.key, required this.bookId, this.addPart = false});
+  const LinkAudioScreen({super.key, required this.bookId, this.addPartTo, this.replaceTrack});
 
   final String bookId;
 
-  /// Appends another recording of the audiobook instead of replacing it.
-  final bool addPart;
+  /// Index of the track that gets another recording (its next part).
+  final int? addPartTo;
+
+  /// Index of the track to replace with the video; without it a video in a
+  /// new language adds a track and one in a known language replaces it.
+  final int? replaceTrack;
+
+  bool get addPart => addPartTo != null;
 
   @override
   ConsumerState<LinkAudioScreen> createState() => _LinkAudioScreenState();
@@ -43,7 +49,7 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
   Future<void> _link(Book book) async {
     if (_url.text.trim().isEmpty) {
       setState(() => _error = 'Paste the YouTube link first. Its subtitles give '
-          'the Ukrainian text and the timing; the audio file alone is not enough.');
+          'the text and the timing; the audio file alone is not enough.');
       return;
     }
     setState(() {
@@ -52,13 +58,15 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
       _status = 'Downloading subtitles…';
     });
     try {
-      final captions = await ref.read(captionSourceProvider).fetch(_url.text);
+      final target = widget.addPartTo;
+      final captions = await ref.read(captionSourceProvider).fetch(_url.text,
+          language: target == null ? null : book.tracks[target].language);
       setState(() => _status =
           'Aligning ${book.sentences.length} sentences with ${captions.cues.length} subtitle lines…');
       final linker = ref.read(audioLinkerProvider);
-      final linked = widget.addPart
-          ? await linker.addPart(book, captions)
-          : await linker.link(book, captions);
+      final linked = target != null
+          ? await linker.addPart(book, target, captions)
+          : await linker.link(book, captions, trackIndex: widget.replaceTrack);
       await ref.read(booksProvider.notifier).updateBook(linked);
       final audio = _audio;
       if (audio != null) {
@@ -84,7 +92,7 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
         .firstOrNull;
     if (book == null) return Scaffold(appBar: AppBar());
     return Scaffold(
-      appBar: AppBar(title: Text(widget.addPart ? 'Add next audio part' : 'Link audiobook')),
+      appBar: AppBar(title: Text(widget.addPart ? 'Add next audio part' : 'Add an audiobook')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

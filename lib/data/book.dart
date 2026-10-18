@@ -8,9 +8,6 @@ class BookSentence {
     required this.accented,
     required this.paragraph,
     this.practiced = false,
-    this.ukFrom,
-    this.ukTo,
-    this.confidence,
   });
 
   /// Sentence as found in the source.
@@ -21,35 +18,11 @@ class BookSentence {
   final int paragraph;
   final bool practiced;
 
-  /// Ukrainian sentences `[ukFrom, ukTo)` of [Book.ukSentences] that
-  /// correspond to this sentence; null when the audio has no counterpart.
-  final int? ukFrom;
-  final int? ukTo;
-
-  /// 0..1 word-overlap score of the alignment (low = probably misaligned).
-  final double? confidence;
-
-  bool get hasAudio => ukFrom != null && ukTo != null && ukTo! > ukFrom!;
-
   BookSentence copyWith({bool? practiced}) => BookSentence(
         text: text,
         accented: accented,
         paragraph: paragraph,
         practiced: practiced ?? this.practiced,
-        ukFrom: ukFrom,
-        ukTo: ukTo,
-        confidence: confidence,
-      );
-
-  BookSentence withAlignment(int? from, int? to, double? confidence) =>
-      BookSentence(
-        text: text,
-        accented: accented,
-        paragraph: paragraph,
-        practiced: practiced,
-        ukFrom: from,
-        ukTo: to,
-        confidence: confidence,
       );
 
   Map<String, dynamic> toJson() => {
@@ -57,9 +30,6 @@ class BookSentence {
         'accented': accented,
         'paragraph': paragraph,
         'practiced': practiced,
-        if (ukFrom != null) 'ukFrom': ukFrom,
-        if (ukTo != null) 'ukTo': ukTo,
-        if (confidence != null) 'confidence': confidence,
       };
 
   factory BookSentence.fromJson(Map<String, dynamic> j) => BookSentence(
@@ -67,15 +37,11 @@ class BookSentence {
         accented: j['accented'] as String,
         paragraph: j['paragraph'] as int,
         practiced: j['practiced'] as bool? ?? false,
-        ukFrom: j['ukFrom'] as int?,
-        ukTo: j['ukTo'] as int?,
-        confidence: (j['confidence'] as num?)?.toDouble(),
       );
 }
 
-/// The YouTube audiobook linked to a book.
-/// One audio file of a [LinkedAudio]: the Ukrainian sentences from index
-/// [from] up to the next part belong to it.
+/// One audio file of an [AudioTrack]: the track sentences from index [from] up
+/// to the next part belong to it.
 class AudioPart {
   const AudioPart({required this.videoId, required this.title, required this.from});
 
@@ -91,20 +57,76 @@ class AudioPart {
       from: j['from'] as int? ?? 0);
 }
 
-class LinkedAudio {
-  const LinkedAudio({
+/// For every Russian sentence of the book, the track sentences `[from, to)`
+/// it corresponds to (null: the audio has no counterpart) and how well the
+/// words match, 0..1 (low = probably misaligned). Shorter than the book when
+/// sentences were added after the last alignment; the tail is then unaligned.
+class TrackAlignment {
+  const TrackAlignment({this.from = const [], this.to = const [], this.confidence = const []});
+
+  final List<int?> from;
+  final List<int?> to;
+  final List<double?> confidence;
+
+  int get length => from.length;
+
+  bool hasAudio(int i) =>
+      i < from.length && from[i] != null && to[i] != null && to[i]! > from[i]!;
+
+  double? confidenceAt(int i) => i < confidence.length ? confidence[i] : null;
+
+  /// Compact JSON: -1 stands for "none".
+  Map<String, dynamic> toJson() => {
+        'from': [for (final v in from) v ?? -1],
+        'to': [for (final v in to) v ?? -1],
+        'conf': [for (final v in confidence) v == null ? -1 : (v * 1000).round()],
+      };
+
+  factory TrackAlignment.fromJson(Map<String, dynamic> j) {
+    List<int?> ints(String key) =>
+        [for (final v in (j[key] as List? ?? const [])) (v as int) < 0 ? null : v];
+    return TrackAlignment(
+      from: ints('from'),
+      to: ints('to'),
+      confidence: [
+        for (final v in (j['conf'] as List? ?? const []))
+          (v as int) < 0 ? null : v / 1000
+      ],
+    );
+  }
+}
+
+/// An audiobook of the book in one language (one or more YouTube videos).
+class AudioTrack {
+  const AudioTrack({
+    required this.language,
+    required this.label,
     required this.parts,
     required this.sentences,
     this.anchors = const [],
+    this.alignment = const TrackAlignment(),
+    this.visible = true,
+    this.bridge,
   }) : assert(parts.length > 0);
 
-  /// A book recorded in one file.
-  LinkedAudio.single({
+  /// A track recorded in one file.
+  AudioTrack.single({
+    required this.language,
+    required this.label,
     required String videoId,
     required String videoTitle,
     required this.sentences,
     this.anchors = const [],
+    this.alignment = const TrackAlignment(),
+    this.visible = true,
+    this.bridge,
   }) : parts = [AudioPart(videoId: videoId, title: videoTitle, from: 0)];
+
+  /// BCP-47 language code of the recording, e.g. `uk` or `pt`.
+  final String language;
+
+  /// Name shown to the user, e.g. "Ukrainian".
+  final String label;
 
   /// The audio files, in reading order. Their sentences follow each other in
   /// [sentences]; the times of a sentence are relative to its own file.
@@ -113,29 +135,39 @@ class LinkedAudio {
   String get videoId => parts.first.videoId;
   String get videoTitle => parts.first.title;
 
-  /// Ukrainian sentences with their position in the audio.
+  /// The track's sentences with their position in the audio.
   final List<TimedText> sentences;
 
-  /// User-confirmed `(ruSentenceIndex, ukSentenceIndex)` pairs.
+  /// User-confirmed `(ruSentenceIndex, trackSentenceIndex)` pairs.
   final List<(int, int)> anchors;
 
-  /// Index into [parts] of the file that holds Ukrainian sentence [uk].
-  int partOf(int uk) {
+  final TrackAlignment alignment;
+
+  /// Whether the track is shown in the reader.
+  final bool visible;
+
+  /// Russian translation of every sentence (same length as [sentences]) used
+  /// to match a language that shares no words with Russian; null when the
+  /// language matches directly.
+  final List<String>? bridge;
+
+  /// Index into [parts] of the file that holds track sentence [index].
+  int partOf(int index) {
     var part = 0;
     for (var k = 1; k < parts.length; k++) {
-      if (parts[k].from <= uk) part = k;
+      if (parts[k].from <= index) part = k;
     }
     return part;
   }
 
-  /// Ukrainian sentences `[from, to)` of part [part].
+  /// Track sentences `[from, to)` of part [part].
   (int, int) partRange(int part) => (
         parts[part].from,
         part + 1 < parts.length ? parts[part + 1].from : sentences.length,
       );
 
-  /// Index of the Ukrainian sentence spoken at [ms] in part [part] (the last
-  /// one starting at or before it), or null before the first.
+  /// Index of the track sentence spoken at [ms] in part [part] (the last one
+  /// starting at or before it), or null before the first.
   int? indexAt(int ms, {int part = 0}) {
     final (from, to) = partRange(part);
     var lo = from, hi = to - 1, found = -1;
@@ -151,28 +183,43 @@ class LinkedAudio {
     return found < 0 ? null : found;
   }
 
-  LinkedAudio copyWith({
+  AudioTrack copyWith({
+    String? label,
     List<TimedText>? sentences,
     List<AudioPart>? parts,
     List<(int, int)>? anchors,
+    TrackAlignment? alignment,
+    bool? visible,
+    List<String>? bridge,
+    bool clearBridge = false,
   }) =>
-      LinkedAudio(
+      AudioTrack(
+        language: language,
+        label: label ?? this.label,
         parts: parts ?? this.parts,
         sentences: sentences ?? this.sentences,
         anchors: anchors ?? this.anchors,
+        alignment: alignment ?? this.alignment,
+        visible: visible ?? this.visible,
+        bridge: clearBridge ? null : (bridge ?? this.bridge),
       );
 
   Map<String, dynamic> toJson() => {
-        // The first part also under the old keys, so older app versions can
-        // still read the book.
-        'videoId': videoId,
-        'videoTitle': videoTitle,
+        'language': language,
+        'label': label,
+        'visible': visible,
         'parts': [for (final p in parts) p.toJson()],
         'sentences': [for (final s in sentences) s.toJson()],
         'anchors': [for (final a in anchors) [a.$1, a.$2]],
+        'alignment': alignment.toJson(),
+        if (bridge != null) 'bridge': bridge,
       };
 
-  factory LinkedAudio.fromJson(Map<String, dynamic> j) => LinkedAudio(
+  factory AudioTrack.fromJson(Map<String, dynamic> j, {TrackAlignment? legacyAlignment}) =>
+      AudioTrack(
+        language: j['language'] as String? ?? 'uk',
+        label: j['label'] as String? ?? 'Ukrainian',
+        visible: j['visible'] as bool? ?? true,
         parts: j['parts'] == null
             ? [
                 AudioPart(
@@ -192,6 +239,10 @@ class LinkedAudio {
           for (final a in (j['anchors'] as List? ?? const []))
             ((a as List)[0] as int, a[1] as int)
         ],
+        alignment: j['alignment'] == null
+            ? (legacyAlignment ?? const TrackAlignment())
+            : TrackAlignment.fromJson(j['alignment'] as Map<String, dynamic>),
+        bridge: (j['bridge'] as List?)?.cast<String>(),
       );
 }
 
@@ -236,7 +287,7 @@ class Book {
     required this.createdAt,
     required this.sentences,
     this.sourceUrl,
-    this.audio,
+    this.tracks = const [],
     this.translations = const [],
     this.nextPage,
   });
@@ -246,7 +297,9 @@ class Book {
   final String? sourceUrl;
   final DateTime createdAt;
   final List<BookSentence> sentences;
-  final LinkedAudio? audio;
+
+  /// Audiobooks in other languages, each aligned with the Russian sentences.
+  final List<AudioTrack> tracks;
   final List<Translation> translations;
 
   /// loveread books: the first page that has not been imported yet.
@@ -254,49 +307,57 @@ class Book {
 
   int get practicedCount => sentences.where((s) => s.practiced).length;
 
-  /// Ukrainian text for sentence [i], or null without audio link.
-  String? ukrainianFor(int i) {
-    final s = sentences[i];
-    final a = audio;
-    if (a == null || !s.hasAudio) return null;
-    return a.sentences.sublist(s.ukFrom!, s.ukTo!).map((e) => e.text).join(' ');
+  bool get hasAudio => tracks.isNotEmpty;
+
+  /// Index of the track in [language], or null.
+  int? trackIndexOf(String language) {
+    final i = tracks.indexWhere((t) => t.language == language);
+    return i < 0 ? null : i;
   }
 
+  /// Whether sentence [i] has a counterpart in track [track].
+  bool hasAudioAt(int i, [int track = 0]) =>
+      track < tracks.length && tracks[track].alignment.hasAudio(i);
+
+  /// The text of track [track] for sentence [i], or null without a counterpart.
+  String? trackTextFor(int i, [int track = 0]) {
+    if (!hasAudioAt(i, track)) return null;
+    final t = tracks[track];
+    final a = t.alignment;
+    return t.sentences.sublist(a.from[i]!, a.to[i]!).map((e) => e.text).join(' ');
+  }
+
+  /// Match score 0..1 of sentence [i] in track [track], null when unknown.
+  double? confidenceAt(int i, [int track = 0]) =>
+      track < tracks.length ? tracks[track].alignment.confidenceAt(i) : null;
+
   /// Audio interval `(startMs, endMs)` of sentence [i], or null.
-  (int, int)? audioRangeFor(int i) {
-    final seg = audioSegmentFor(i);
+  (int, int)? audioRangeFor(int i, [int track = 0]) {
+    final seg = audioSegmentFor(i, track);
     return seg == null ? null : (seg.startMs, seg.endMs);
   }
 
-  /// The audio file and interval of sentence [i], or null. When the
-  /// sentence straddles two parts only the piece in the first is returned.
-  ({String videoId, int part, int startMs, int endMs})? audioSegmentFor(int i) {
-    final s = sentences[i];
-    final a = audio;
-    if (a == null || !s.hasAudio) return null;
-    final part = a.partOf(s.ukFrom!);
-    final last = math.min(s.ukTo!, a.partRange(part).$2) - 1;
+  /// The audio file and interval of sentence [i] in track [track], or null.
+  /// When the sentence straddles two parts only the piece in the first is
+  /// returned.
+  ({String videoId, int part, int startMs, int endMs})? audioSegmentFor(int i,
+      [int track = 0]) {
+    if (!hasAudioAt(i, track)) return null;
+    final t = tracks[track];
+    final from = t.alignment.from[i]!, to = t.alignment.to[i]!;
+    final part = t.partOf(from);
+    final last = math.min(to, t.partRange(part).$2) - 1;
     return (
-      videoId: a.parts[part].videoId,
+      videoId: t.parts[part].videoId,
       part: part,
-      startMs: a.sentences[s.ukFrom!].startMs,
-      endMs: a.sentences[last].endMs,
+      startMs: t.sentences[from].startMs,
+      endMs: t.sentences[last].endMs,
     );
-  }
-
-  /// Index of the Russian sentence whose audio contains [ms], or null.
-  int? sentenceAt(int ms) {
-    for (var i = 0; i < sentences.length; i++) {
-      final r = audioRangeFor(i);
-      if (r != null && ms >= r.$1 && ms < r.$2) return i;
-    }
-    return null;
   }
 
   Book _copy({
     List<BookSentence>? sentences,
-    LinkedAudio? audio,
-    bool replaceAudio = false,
+    List<AudioTrack>? tracks,
     List<Translation>? translations,
     int? nextPage,
   }) =>
@@ -306,7 +367,7 @@ class Book {
         sourceUrl: sourceUrl,
         createdAt: createdAt,
         sentences: sentences ?? this.sentences,
-        audio: replaceAudio ? audio : this.audio,
+        tracks: tracks ?? this.tracks,
         translations: translations ?? this.translations,
         nextPage: nextPage ?? this.nextPage,
       );
@@ -315,11 +376,22 @@ class Book {
 
   Book withTranslations(List<Translation> next) => _copy(translations: next);
 
-  Book withAudio(LinkedAudio? next, {List<BookSentence>? sentences}) =>
-      _copy(audio: next, replaceAudio: true, sentences: sentences);
+  Book withTracks(List<AudioTrack> next) => _copy(tracks: next);
+
+  /// [track] replaces the one at [index], or is added when [index] is null.
+  Book withTrack(AudioTrack track, {int? index}) => withTracks([
+        for (var i = 0; i < tracks.length; i++) i == index ? track : tracks[i],
+        if (index == null) track,
+      ]);
+
+  Book withoutTrack(int index) => withTracks([
+        for (var i = 0; i < tracks.length; i++)
+          if (i != index) tracks[i]
+      ]);
 
   /// Adds [more] sentences at the end; every translation gets empty lines
-  /// for them so indices (audio link, sync points) stay valid.
+  /// for them so indices (audio links, sync points) stay valid. Track
+  /// alignments simply end earlier than the book.
   Book appended(List<BookSentence> more, {int? nextPage}) => _copy(
         sentences: [...sentences, ...more],
         translations: [
@@ -336,27 +408,54 @@ class Book {
         'createdAt': createdAt.toIso8601String(),
         'sentences': [for (final s in sentences) s.toJson()],
         if (nextPage != null) 'nextPage': nextPage,
-        if (audio != null) 'audio': audio!.toJson(),
+        if (tracks.isNotEmpty) 'audioTracks': [for (final t in tracks) t.toJson()],
         if (translations.isNotEmpty)
           'translations': [for (final t in translations) t.toJson()],
       };
 
-  factory Book.fromJson(Map<String, dynamic> j) => Book(
-        id: j['id'] as String,
-        title: j['title'] as String,
-        sourceUrl: j['sourceUrl'] as String?,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        sentences: [
-          for (final s in j['sentences'] as List)
-            BookSentence.fromJson(s as Map<String, dynamic>)
-        ],
-        audio: j['audio'] == null
-            ? null
-            : LinkedAudio.fromJson(j['audio'] as Map<String, dynamic>),
-        translations: [
-          for (final t in (j['translations'] as List? ?? const []))
-            Translation.fromJson(t as Map<String, dynamic>)
-        ],
-        nextPage: j['nextPage'] as int?,
-      );
+  factory Book.fromJson(Map<String, dynamic> j) {
+    final rawSentences = j['sentences'] as List;
+    final List<AudioTrack> tracks;
+    if (j['audioTracks'] != null) {
+      tracks = [
+        for (final t in j['audioTracks'] as List)
+          AudioTrack.fromJson(t as Map<String, dynamic>)
+      ];
+    } else if (j['audio'] != null) {
+      // Books saved before audio tracks: one Ukrainian audiobook whose
+      // alignment lived in the sentences.
+      List<int?> ints(String key) =>
+          [for (final s in rawSentences) (s as Map<String, dynamic>)[key] as int?];
+      tracks = [
+        AudioTrack.fromJson(
+          j['audio'] as Map<String, dynamic>,
+          legacyAlignment: TrackAlignment(
+            from: ints('ukFrom'),
+            to: ints('ukTo'),
+            confidence: [
+              for (final s in rawSentences)
+                ((s as Map<String, dynamic>)['confidence'] as num?)?.toDouble()
+            ],
+          ),
+        )
+      ];
+    } else {
+      tracks = const [];
+    }
+    return Book(
+      id: j['id'] as String,
+      title: j['title'] as String,
+      sourceUrl: j['sourceUrl'] as String?,
+      createdAt: DateTime.parse(j['createdAt'] as String),
+      sentences: [
+        for (final s in rawSentences) BookSentence.fromJson(s as Map<String, dynamic>)
+      ],
+      tracks: tracks,
+      translations: [
+        for (final t in (j['translations'] as List? ?? const []))
+          Translation.fromJson(t as Map<String, dynamic>)
+      ],
+      nextPage: j['nextPage'] as int?,
+    );
+  }
 }

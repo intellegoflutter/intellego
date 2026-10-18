@@ -41,6 +41,6 @@ void main() {
   test('translations survive audio and sentence updates', () {
     final book = base().withTranslations([const Translation(name: 'EN', lines: ['x', 'y', 'z'])]);
     expect(book.withSentences(book.sentences).translations, hasLength(1));
-    expect(book.withAudio(null).translations, hasLength(1));
+    expect(book.withTracks(const []).translations, hasLength(1));
   });
 }
