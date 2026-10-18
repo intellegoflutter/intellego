@@ -5,6 +5,7 @@ List<String> split(String s) =>
     const SentenceSplitter().split(s).map((e) => e.text).toList();
 
 void main() {
+  portugueseTests();
   test('basic sentences', () {
     expect(split('Он пришёл домой. Она ждала! Кто там? Никто.'),
         ['Он пришёл домой.', 'Она ждала!', 'Кто там?', 'Никто.']);
@@ -54,5 +55,34 @@ void main() {
 
   test('empty input', () {
     expect(split('  \n '), isEmpty);
+  });
+}
+
+void portugueseTests() {
+  group('SentenceSplitter.forLanguage', () {
+    final pt = SentenceSplitter.forLanguage('pt-BR');
+
+    test('Portuguese titles do not end a sentence', () {
+      expect(pt.split('O Sr. Silva chegou. A Dra. Maria saiu.').map((s) => s.text),
+          ['O Sr. Silva chegou.', 'A Dra. Maria saiu.']);
+    });
+
+    test('Portuguese dialogue and questions', () {
+      expect(pt.split('Ela perguntou: — Quem é? Ninguém respondeu. Então partiu!').map((s) => s.text),
+          ['Ela perguntou: — Quem é?', 'Ninguém respondeu.', 'Então partiu!']);
+    });
+
+    test('Russian titles are not special in Portuguese, Portuguese ones not in Russian', () {
+      expect(const SentenceSplitter().split('Chegou o Sr. Silva.').length, 2);
+      expect(pt.split('Rua Marechal Deodoro, 10 etc. Depois foi.').length, 2);
+    });
+
+    test('Ukrainian and English lists', () {
+      expect(SentenceSplitter.forLanguage('uk').split('Вул. Шевченка була пуста. Він пішов.').map((s) => s.text),
+          ['Вул. Шевченка була пуста.', 'Він пішов.']);
+      expect(SentenceSplitter.forLanguage('en').split('Dr. Smith left. He was tired.').map((s) => s.text),
+          ['Dr. Smith left.', 'He was tired.']);
+      expect(SentenceSplitter.forLanguage('xx').split('Eins. Zwei.').length, 2);
+    });
   });
 }

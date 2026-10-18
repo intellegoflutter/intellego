@@ -51,12 +51,16 @@ AlignmentResult alignSentences(
   int anchorWindow = 25,
   bool refine = false,
   List<(int ru, int uk)> manualAnchors = const [],
+  List<Set<int>>? ruStems,
+  List<Set<int>>? ukStems,
 }) {
   if (ru.isEmpty || uk.isEmpty) {
     return AlignmentResult(const [], ruStart: 0, ruEnd: 0);
   }
-  final ruSets = [for (final s in ru) stemSet(s)];
-  final ukSets = [for (final s in uk) stemSet(s)];
+  // The sets the sentences are compared by: word stems of the texts unless
+  // the caller supplies its own (another language, or a translation).
+  final ruSets = ruStems ?? [for (final s in ru) stemSet(s)];
+  final ukSets = ukStems ?? [for (final s in uk) stemSet(s)];
   final coarse = _coarsePath(ru, uk, ruSets, ukSets, manualAnchors,
       blockChars: coarseBlockChars, match: coarseMatch, gap: coarseGap);
   var path = coarse?.$1 ?? _expectedPath(ruSets, ukSets, anchorWindow, manualAnchors);

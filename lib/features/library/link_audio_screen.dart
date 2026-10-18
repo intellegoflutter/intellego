@@ -31,6 +31,7 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
   final _url = TextEditingController();
   File? _audio;
   bool _busy = false;
+  double? _progress;
   String? _status;
   String? _error;
 
@@ -61,12 +62,25 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
       final target = widget.addPartTo;
       final captions = await ref.read(captionSourceProvider).fetch(_url.text,
           language: target == null ? null : book.tracks[target].language);
-      setState(() => _status =
-          'Aligning ${book.sentences.length} sentences with ${captions.cues.length} subtitle lines…');
+      setState(() {
+        _status = 'Matching ${book.sentences.length} sentences with '
+            '${captions.cues.length} subtitle lines…';
+        _progress = null;
+      });
+      void progress(String status, double? value) {
+        if (mounted) {
+          setState(() {
+            _status = status;
+            _progress = value;
+          });
+        }
+      }
+
       final linker = ref.read(audioLinkerProvider);
       final linked = target != null
-          ? await linker.addPart(book, target, captions)
-          : await linker.link(book, captions, trackIndex: widget.replaceTrack);
+          ? await linker.addPart(book, target, captions, onProgress: progress)
+          : await linker.link(book, captions,
+              trackIndex: widget.replaceTrack, onProgress: progress);
       await ref.read(booksProvider.notifier).updateBook(linked);
       final audio = _audio;
       if (audio != null) {
@@ -105,11 +119,19 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
             decoration: const InputDecoration(
               labelText: 'YouTube link (required)',
               helperText: 'The subtitles (auto-generated are fine) give the '
-                  'Ukrainian text and the timing of every sentence.',
+                  'text and the timing of every sentence. Any language works: '
+                  'it is added next to the others.',
               border: OutlineInputBorder(),
             ),
             onSubmitted: (_) => _link(book),
           ),
+          if (!ref.read(sentenceTranslatorProvider).supported)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text('Languages written in Latin letters (Portuguese, Italian…) '
+                  'are matched best with the phone\'s translator. Here they are matched '
+                  'roughly; use "Sync here" to correct them.'),
+            ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             icon: const Icon(Icons.folder_open),
@@ -130,7 +152,7 @@ class _LinkAudioScreenState extends ConsumerState<LinkAudioScreen> {
           ),
           if (_busy) ...[
             const SizedBox(height: 16),
-            const LinearProgressIndicator(),
+            LinearProgressIndicator(value: _progress),
             if (_status != null)
               Padding(padding: const EdgeInsets.only(top: 8), child: Text(_status!)),
           ],

@@ -7,7 +7,8 @@ import 'caption_models.dart';
 /// sentence boundary is mapped back to a time inside its cue (interpolated by
 /// character position). Auto-generated cues overlap, so a cue is considered
 /// to end when the next one starts.
-List<TimedText> cuesToSentences(List<Cue> cues, {int maxSentenceChars = 320}) {
+List<TimedText> cuesToSentences(List<Cue> cues,
+    {int maxSentenceChars = 320, String language = 'uk'}) {
   final sorted = [...cues]..sort((a, b) => a.startMs.compareTo(b.startMs));
   final text = StringBuffer();
   final cueStart = <int>[]; // char offset of each cue in [text]
@@ -55,7 +56,7 @@ List<TimedText> cuesToSentences(List<Cue> cues, {int maxSentenceChars = 320}) {
 
   final result = <TimedText>[];
   var pos = 0;
-  for (final s in const SentenceSplitter().split(full)) {
+  for (final s in SentenceSplitter.forLanguage(language).split(full)) {
     final start = full.indexOf(s.text, pos);
     if (start < 0) continue;
     final end = start + s.text.length;

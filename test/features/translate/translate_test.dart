@@ -13,9 +13,12 @@ class _Fake implements SentenceTranslator {
   Future<bool> isReady(String code) async => true;
 
   @override
-  Future<String> translate(String text, String code) async {
-    calls.add((text, code));
-    return '[$code] $text';
+  Future<String> translate(String text, String code) => translateBetween(text, 'ru', code);
+
+  @override
+  Future<String> translateBetween(String text, String from, String to) async {
+    calls.add((text, to));
+    return '[$to] $text';
   }
 
   @override

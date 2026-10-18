@@ -49,7 +49,8 @@ final importServiceProvider =
 
 final captionSourceProvider = Provider<CaptionSource>((ref) => YoutubeCaptionSource());
 
-final audioLinkerProvider = Provider<AudioLinker>((ref) => const AudioLinker());
+final audioLinkerProvider = Provider<AudioLinker>(
+    (ref) => AudioLinker(translator: ref.read(sentenceTranslatorProvider)));
 
 final audioStoreProvider = Provider<AudioStore>((ref) => AudioStore());
 

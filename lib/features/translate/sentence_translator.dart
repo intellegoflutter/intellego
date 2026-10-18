@@ -5,7 +5,7 @@ import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import '../../data/book.dart';
 import 'language_codes.dart';
 
-/// Translates Russian sentences into another language.
+/// Translates sentences between languages on the device.
 abstract class SentenceTranslator {
   /// False where no translator exists (the desktop build).
   bool get supported;
@@ -15,7 +15,11 @@ abstract class SentenceTranslator {
 
   /// Translates [text] from Russian into the language [code]. Downloads the
   /// language model first when needed.
-  Future<String> translate(String text, String code);
+  Future<String> translate(String text, String code) =>
+      translateBetween(text, 'ru', code);
+
+  /// Translates [text] from the language [from] into [to] (BCP-47 codes).
+  Future<String> translateBetween(String text, String from, String to);
 
   Future<void> dispose();
 }
@@ -30,7 +34,10 @@ class NoTranslator implements SentenceTranslator {
   Future<bool> isReady(String code) async => false;
 
   @override
-  Future<String> translate(String text, String code) =>
+  Future<String> translate(String text, String code) => translateBetween(text, 'ru', code);
+
+  @override
+  Future<String> translateBetween(String text, String from, String to) =>
       Future.error(UnsupportedError('Translation is only available on Android.'));
 
   @override
@@ -42,14 +49,22 @@ class NoTranslator implements SentenceTranslator {
 class MlKitTranslator implements SentenceTranslator {
   final _manager = OnDeviceTranslatorModelManager();
   final _translators = <String, OnDeviceTranslator>{};
-  var _russianReady = false;
+  final _ready = <String>{};
 
   @override
   bool get supported => true;
 
   TranslateLanguage _language(String code) =>
-      BCP47Code.fromRawValue(code) ??
+      BCP47Code.fromRawValue(baseLanguage(code)) ??
       (throw ArgumentError('Language "$code" cannot be translated on the device.'));
+
+  Future<void> _ensureModel(TranslateLanguage language) async {
+    if (_ready.contains(language.bcpCode)) return;
+    if (!await _manager.isModelDownloaded(language.bcpCode)) {
+      await _manager.downloadModel(language.bcpCode, isWifiRequired: false);
+    }
+    _ready.add(language.bcpCode);
+  }
 
   @override
   Future<bool> isReady(String code) async =>
@@ -57,17 +72,15 @@ class MlKitTranslator implements SentenceTranslator {
       await _manager.isModelDownloaded(_language(code).bcpCode);
 
   @override
-  Future<String> translate(String text, String code) async {
-    final target = _language(code);
-    if (!_russianReady) {
-      await _manager.downloadModel(TranslateLanguage.russian.bcpCode, isWifiRequired: false);
-      _russianReady = true;
-    }
-    if (!await _manager.isModelDownloaded(target.bcpCode)) {
-      await _manager.downloadModel(target.bcpCode, isWifiRequired: false);
-    }
-    final translator = _translators[code] ??= OnDeviceTranslator(
-        sourceLanguage: TranslateLanguage.russian, targetLanguage: target);
+  Future<String> translate(String text, String code) => translateBetween(text, 'ru', code);
+
+  @override
+  Future<String> translateBetween(String text, String from, String to) async {
+    final source = _language(from), target = _language(to);
+    await _ensureModel(source);
+    await _ensureModel(target);
+    final translator = _translators['${source.bcpCode}>${target.bcpCode}'] ??=
+        OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
     return (await translator.translateText(text)).trim();
   }
 
