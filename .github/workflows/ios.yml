@@ -1,0 +1,43 @@
+name: iOS build
+
+# Run by hand (Actions > iOS build > Run workflow). The app is built without
+# signing, to see that it compiles; an unsigned .ipa cannot be installed on a
+# device as it is.
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/ios]
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.7'
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build without signing
+        run: |
+          flutter build ios --release --no-codesign \
+            --build-number="$(git rev-list --count HEAD)"
+
+      - name: Pack the unsigned app as an .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry Intellego-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: intellego-ios-unsigned
+          path: Intellego-unsigned.ipa
+          if-no-files-found: error
