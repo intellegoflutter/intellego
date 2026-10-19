@@ -24,6 +24,8 @@ import '../features/speaking/russian_speaker.dart';
 import '../features/speaking/speaking_log.dart';
 import '../features/speaking/speech_recognizer.dart';
 import '../features/translate/sentence_translator.dart';
+import '../features/words/vocab.dart';
+import '../features/words/word_lookup.dart';
 import '../features/youtube/youtube_captions.dart';
 
 final bookRepositoryProvider = FutureProvider<BookRepository>((ref) async {
@@ -190,3 +192,74 @@ final passiveListeningProvider =
     NotifierProvider<PassiveListeningNotifier, PassiveState>(
       PassiveListeningNotifier.new,
     );
+
+final wordLookupProvider = Provider<WordLookupService>((ref) {
+  final service = WordLookupService();
+  ref.onDispose(service.close);
+  return service;
+});
+
+/// The words saved for practice.
+class VocabNotifier extends AsyncNotifier<List<VocabEntry>> {
+  Future<VocabFile> _file() async {
+    final docs = await getApplicationDocumentsDirectory();
+    return VocabFile(File('${docs.path}/vocab.json'));
+  }
+
+  @override
+  Future<List<VocabEntry>> build() async => (await _file()).load();
+
+  Future<void> _set(List<VocabEntry> next) async {
+    state = AsyncData(next);
+    await (await _file()).save(next);
+  }
+
+  VocabEntry? find(String key) =>
+      state.value?.where((e) => e.key == key).firstOrNull;
+
+  /// Saves [key]; a word already saved keeps its schedule and gains
+  /// [context] and the new [note].
+  Future<void> save({
+    required String key,
+    required String display,
+    required String note,
+    required VocabContext context,
+  }) async {
+    final all = state.value ?? const <VocabEntry>[];
+    final now = DateTime.now();
+    final old = find(key);
+    final entry = old == null
+        ? VocabEntry(
+            key: key,
+            display: display,
+            note: note,
+            contexts: [context],
+            added: now,
+            due: now,
+          )
+        : withContext(old, context).copyWith(note: note);
+    await _set([
+      for (final e in all)
+        if (e.key != key) e,
+      entry,
+    ]);
+  }
+
+  Future<void> remove(String key) async => _set([
+    for (final e in state.value ?? const <VocabEntry>[])
+      if (e.key != key) e,
+  ]);
+
+  Future<void> review(String key, {required bool remembered}) async {
+    final all = state.value ?? const <VocabEntry>[];
+    final now = DateTime.now();
+    await _set([
+      for (final e in all)
+        e.key == key ? scheduleNext(e, remembered: remembered, now: now) : e,
+    ]);
+  }
+}
+
+final vocabProvider = AsyncNotifierProvider<VocabNotifier, List<VocabEntry>>(
+  VocabNotifier.new,
+);

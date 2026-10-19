@@ -65,6 +65,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Opening dictionary pages in the browser (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <!-- Text-to-speech engines (flutter_tts), needed on Android 11+. -->
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE"/>

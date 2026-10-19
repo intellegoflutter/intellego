@@ -28,6 +28,10 @@ import '../youtube/caption_models.dart';
 import 'reader_font.dart';
 import 'reading_position.dart';
 import 'translations_dialogs.dart';
+import '../words/vocab.dart';
+import '../words/word_sheet.dart';
+import '../words/word_text.dart';
+import '../words/word_tokens.dart';
 import 'ukrainian_text_tools.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
@@ -1199,6 +1203,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final start = _startIndex;
     if (start == null) return const SizedBox.shrink();
     final fontSize = ref.watch(readerFontSizeProvider);
+    final saved = {
+      for (final e in ref.watch(vocabProvider).value ?? <VocabEntry>[]) e.key,
+    };
     return ScrollablePositionedList.separated(
       itemScrollController: _scroll,
       itemPositionsListener: _positions,
@@ -1217,6 +1224,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         book: book,
         fontSize: fontSize,
         flash: _flash == i,
+        savedWords: saved,
+        onWord: (word) => showWordSheet(
+          context,
+          word: word,
+          bookId: book.id,
+          sentence: i,
+          sentenceText: book.sentences[i].accented,
+        ),
         onChapter: (action) => _chapterAction(book, i, action),
         playing: _playing == i
             ? _playingTrack
@@ -1252,6 +1267,8 @@ class _SentenceTile extends StatelessWidget {
     required this.book,
     required this.fontSize,
     required this.flash,
+    required this.savedWords,
+    required this.onWord,
     required this.onChapter,
     required this.playing,
     required this.speaking,
@@ -1277,6 +1294,10 @@ class _SentenceTile extends StatelessWidget {
 
   /// Tinted for a moment after a jump here (search, chapters).
   final bool flash;
+
+  /// Words saved for practice (by [lookupForm]); tapping a word calls [onWord].
+  final Set<String> savedWords;
+  final void Function(String word) onWord;
 
   /// 'set' (add or rename) or 'remove' the chapter that starts here.
   final void Function(String action) onChapter;
@@ -1385,27 +1406,27 @@ class _SentenceTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(text: s.accented),
-                          const TextSpan(text: ' '),
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.middle,
-                            child: _InlineButton(
-                              tooltip: speaking == 'ru'
-                                  ? 'Stop'
-                                  : 'Hear it in Russian (synthetic voice)',
-                              icon: speaking == 'ru'
-                                  ? Icons.stop
-                                  : Icons.volume_up,
-                              background: theme.colorScheme.tertiaryContainer,
-                              foreground: theme.colorScheme.onTertiaryContainer,
-                              onTap: () => onSpeak(s.text, 'ru'),
-                            ),
+                    WordText(
+                      text: s.accented,
+                      saved: savedWords,
+                      onWord: onWord,
+                      trailing: [
+                        const TextSpan(text: ' '),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: _InlineButton(
+                            tooltip: speaking == 'ru'
+                                ? 'Stop'
+                                : 'Hear it in Russian (synthetic voice)',
+                            icon: speaking == 'ru'
+                                ? Icons.stop
+                                : Icons.volume_up,
+                            background: theme.colorScheme.tertiaryContainer,
+                            foreground: theme.colorScheme.onTertiaryContainer,
+                            onTap: () => onSpeak(s.text, 'ru'),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontSize: fontSize,
                         height: 1.4,
