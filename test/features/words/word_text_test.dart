@@ -14,7 +14,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WordText(
-            text: 'Он пришё${m}л домо${m}й, 42.',
+            text: 'Он пришё$mл домо$mй, 42.',
             style: null,
             saved: const {'дом'},
             onWord: tapped.add,
@@ -32,9 +32,9 @@ void main() {
       for (final s in spans)
         if (s.recognizer != null) s,
     ];
-    expect([for (final s in words) s.text], ['Он', 'пришё${m}л', 'домо${m}й']);
+    expect([for (final s in words) s.text], ['Он', 'пришё$mл', 'домо$mй']);
     (words[1].recognizer! as TapGestureRecognizer).onTap!();
-    expect(tapped, ['пришё${m}л']);
+    expect(tapped, ['пришё$mл']);
     // "42" is not a word to look up.
     expect(spans.any((s) => s.text == '42' && s.recognizer != null), isFalse);
   });
@@ -44,7 +44,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WordText(
-            text: 'Это до${m}м.',
+            text: 'Это до$mм.',
             style: null,
             saved: const {'дом'},
             onWord: (_) {},
@@ -57,7 +57,7 @@ void main() {
       if (s is TextSpan) spans.add(s);
       return true;
     });
-    final dom = spans.firstWhere((s) => s.text == 'до${m}м');
+    final dom = spans.firstWhere((s) => s.text == 'до$mм');
     expect(dom.style?.decoration, TextDecoration.underline);
     final eto = spans.firstWhere((s) => s.text == 'Это');
     expect(eto.style, isNull);

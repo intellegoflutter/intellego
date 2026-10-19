@@ -177,7 +177,9 @@ class SyncClient {
     final sections = differingSections(ld, rd);
     final tracks = differingTracks(ld, rd);
     final settingsDiffer =
-        ld.position != rd.position || ld.nextPage != rd.nextPage;
+        ld.position != rd.position ||
+        ld.nextPage != rd.nextPage ||
+        ld.chapters != rd.chapters;
     if (sections.isEmpty &&
         tracks.isEmpty &&
         ld.sentences == rd.sentences &&

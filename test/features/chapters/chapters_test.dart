@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intellego/data/book.dart';
 import 'package:intellego/features/chapters/chapter_detection.dart';
 import 'package:intellego/features/import/html_text_extractor.dart';
-import 'package:intellego/features/sync/book_merge.dart';
 
 BookSentence s(String t, int p) =>
     BookSentence(text: t, accented: t, paragraph: p);
@@ -93,11 +92,5 @@ void main() {
       [for (final c in chaptersFromHeadings(sentences, page.headings)) c.title],
       ['Первая часть', 'Вторая часть'],
     );
-  });
-
-  test('sync keeps the chapters of a book', () {
-    final a = book(const [Chapter(title: 'A', sentenceIndex: 0)]);
-    final merged = mergeBooks(a, book());
-    expect(merged.chapters, a.chapters);
   });
 }

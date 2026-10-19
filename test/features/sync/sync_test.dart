@@ -164,6 +164,44 @@ void main() {
       expect(_json(onPhone), _json(onDesktop));
     });
 
+    test('chapters from both devices are joined, the same on both', () {
+      Book with_(List<Chapter> chapters) => _book().withChapters(chapters);
+      final phone = _bundle(
+        with_(const [
+          Chapter(title: 'One', sentenceIndex: 0),
+          Chapter(title: 'Two', sentenceIndex: 2),
+        ]),
+      );
+      final desktop = _bundle(
+        with_(const [
+          Chapter(title: 'Uno', sentenceIndex: 0),
+          Chapter(title: 'Three', sentenceIndex: 1),
+        ]),
+      );
+      final onPhone = applyPatch(phone, _all(desktop));
+      final onDesktop = applyPatch(desktop, _all(phone));
+      expect(
+        [
+          for (final c in onPhone.book.chapters)
+            '${c.sentenceIndex}:${c.title}',
+        ],
+        ['0:Uno', '1:Three', '2:Two'],
+      );
+      expect(_json(onPhone), _json(onDesktop));
+      expect(digestOf(phone).chapters, isNot(digestOf(desktop).chapters));
+    });
+
+    test(
+      'applying a patch keeps the chapters of a copy it knows nothing of',
+      () {
+        final mine = _bundle(
+          _book().withChapters(const [Chapter(title: 'One', sentenceIndex: 0)]),
+        );
+        final merged = applyPatch(mine, _all(_bundle(_book())));
+        expect(merged.book.chapters, hasLength(1));
+      },
+    );
+
     test('equal times give the same winner on both sides', () {
       Book with_(String line) => _book(
         translations: [

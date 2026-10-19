@@ -172,7 +172,7 @@ class PassiveListeningNotifier extends Notifier<PassiveState> {
       onState: (s) => state = s,
       onSentence: ReadingPosition.save,
     );
-    ref.onDispose(_listener.stop);
+    ref.onDispose(_listener.dispose);
     return PassiveState.idle;
   }
 

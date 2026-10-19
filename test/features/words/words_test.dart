@@ -12,7 +12,7 @@ const m = '́';
 
 VocabEntry entry({int box = 0, DateTime? due}) => VocabEntry(
   key: 'дом',
-  display: 'до${m}м',
+  display: 'до$mм',
   note: 'house',
   contexts: const [VocabContext(bookId: 'b', sentence: 3, text: 'Это дом.')],
   added: DateTime.utc(2024),
@@ -23,11 +23,11 @@ VocabEntry entry({int box = 0, DateTime? due}) => VocabEntry(
 void main() {
   group('tokenizeWords', () {
     test('keeps stress marks and hyphens inside words', () {
-      const text = 'Он пришё${m}л домо${m}й, кто-то по-русски.';
+      const text = 'Он пришё$mл домо$mй, кто-то по-русски.';
       final words = tokenizeWords(text);
       expect(
         [for (final w in words) w.text],
-        ['Он', 'пришё${m}л', 'домо${m}й', 'кто-то', 'по-русски'],
+        ['Он', 'пришё$mл', 'домо$mй', 'кто-то', 'по-русски'],
       );
       for (final w in words) {
         expect(text.substring(w.start, w.end), w.text);
@@ -35,8 +35,8 @@ void main() {
     });
 
     test('lookupForm lowers case and drops the mark but keeps ё', () {
-      expect(lookupForm('Всё${m}'), 'всё');
-      expect(lookupForm('До${m}м'), 'дом');
+      expect(lookupForm('Всё$m'), 'всё');
+      expect(lookupForm('До$mм'), 'дом');
     });
 
     test('numbers and punctuation alone are not looked up', () {
@@ -182,7 +182,7 @@ void main() {
       expect(await file.load(), isEmpty);
       await file.save([entry(box: 2)]);
       final back = (await file.load()).single;
-      expect(back.display, 'до${m}м');
+      expect(back.display, 'до$mм');
       expect(back.box, 2);
       expect(back.contexts.single.sentence, 3);
       await File('${dir.path}/sub/vocab.json').writeAsString('{oops');
