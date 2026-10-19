@@ -5,8 +5,6 @@ name: iOS build
 # device as it is.
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/ios]
 
 jobs:
   ios:
