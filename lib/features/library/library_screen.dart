@@ -13,6 +13,9 @@ import 'import_screen.dart';
 import 'link_audio_screen.dart';
 import 'track_picker.dart';
 
+/// Phones and tablets ask the computer for a sync; the computer serves it.
+final _isMobile = Platform.isAndroid || Platform.isIOS;
+
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -55,13 +58,12 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           IconButton(
-            icon: Icon(Platform.isAndroid ? Icons.sync : Icons.wifi_tethering),
-            tooltip: Platform.isAndroid ? 'Sync now' : 'Sync with the phone',
+            icon: Icon(_isMobile ? Icons.sync : Icons.wifi_tethering),
+            tooltip: _isMobile ? 'Sync now' : 'Sync with the phone',
             onPressed: () => showDialog<void>(
               context: context,
-              builder: (_) => Platform.isAndroid
-                  ? const SyncNowDialog()
-                  : const SyncServerDialog(),
+              builder: (_) =>
+                  _isMobile ? const SyncNowDialog() : const SyncServerDialog(),
             ),
           ),
         ],
