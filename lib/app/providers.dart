@@ -14,7 +14,9 @@ import '../features/nlp/accent/onnx/model_store.dart';
 import '../features/nlp/accent/onnx/onnx_accentuator_loader.dart';
 import '../features/playback/audio_downloader.dart';
 import '../features/playback/audio_store.dart';
+import '../features/playback/passive_listening.dart';
 import '../features/playback/segment_player.dart';
+import '../features/reader/reading_position.dart';
 import '../features/speaking/asr_model_store.dart';
 import '../features/speaking/feedback_writer.dart';
 import '../features/speaking/recorder.dart';
@@ -153,3 +155,38 @@ class BooksNotifier extends AsyncNotifier<List<Book>> {
 final booksProvider = AsyncNotifierProvider<BooksNotifier, List<Book>>(
   BooksNotifier.new,
 );
+
+/// "Listen from here": continuous audiobook playback that the reader follows.
+class PassiveListeningNotifier extends Notifier<PassiveState> {
+  late final PassiveListener _listener;
+
+  @override
+  PassiveState build() {
+    _listener = PassiveListener(
+      player: ref.read(segmentPlayerProvider),
+      fileFor: (id) => ref.read(audioFileProvider(id).future),
+      bookById: (id) =>
+          ref.read(booksProvider).value?.where((b) => b.id == id).firstOrNull,
+      onState: (s) => state = s,
+      onSentence: ReadingPosition.save,
+    );
+    ref.onDispose(_listener.stop);
+    return PassiveState.idle;
+  }
+
+  Future<void> start(Book book, int track, int from) async {
+    await ref.read(russianSpeakerProvider).stop();
+    await _listener.start(book, track, from);
+  }
+
+  Future<void> togglePlay() => _listener.togglePlay();
+
+  Future<void> skip(int step) => _listener.skip(step);
+
+  Future<void> stop() => _listener.stop();
+}
+
+final passiveListeningProvider =
+    NotifierProvider<PassiveListeningNotifier, PassiveState>(
+      PassiveListeningNotifier.new,
+    );
