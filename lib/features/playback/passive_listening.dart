@@ -210,6 +210,14 @@ class PassiveListener {
     _completed = null;
   }
 
+  /// Stops for good when its owner goes away: nobody is told any more.
+  Future<void> dispose() async {
+    final wasActive = state.active;
+    state = PassiveState.idle;
+    await _stopListening();
+    if (wasActive) await player.pause();
+  }
+
   /// Ends listening; [message] says why when it was not the user's choice.
   Future<void> stop({String? message}) async {
     await _stopListening();

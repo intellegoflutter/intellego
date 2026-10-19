@@ -41,6 +41,7 @@ class BookDigest {
     required this.tracks,
     required this.nextPage,
     required this.position,
+    this.chapters = 0,
   });
 
   final int sentences;
@@ -57,6 +58,9 @@ class BookDigest {
   final int? nextPage;
   final int position;
 
+  /// Hash of the chapter list.
+  final int chapters;
+
   Map<String, dynamic> toJson() => {
     'sentences': sentences,
     'textHash': textHash,
@@ -64,6 +68,7 @@ class BookDigest {
     'tracks': tracks,
     if (nextPage != null) 'nextPage': nextPage,
     'position': position,
+    'chapters': chapters,
   };
 
   factory BookDigest.fromJson(Map<String, dynamic> j) => BookDigest(
@@ -73,6 +78,7 @@ class BookDigest {
     tracks: (j['tracks'] as Map).map((k, v) => MapEntry('$k', v as int)),
     nextPage: j['nextPage'] as int?,
     position: j['position'] as int? ?? 0,
+    chapters: j['chapters'] as int? ?? 0,
   );
 }
 
@@ -120,6 +126,12 @@ BookDigest digestOf(BookBundle bundle) {
     },
     nextPage: book.nextPage,
     position: bundle.position,
+    chapters: _hashOf((h) {
+      for (final c in book.chapters) {
+        h.number(c.sentenceIndex);
+        h.text(c.title);
+      }
+    }),
   );
 }
 
@@ -204,6 +216,7 @@ class BookPatch {
     this.tracks = const [],
     this.nextPage,
     this.position = 0,
+    this.chapters = const [],
   });
 
   /// Index of the first of [tail], sentences added at the end of the book.
@@ -214,6 +227,9 @@ class BookPatch {
   final int? nextPage;
   final int position;
 
+  /// The book's chapters; joined with the other copy's by sentence.
+  final List<Chapter> chapters;
+
   Map<String, dynamic> toJson() => {
     if (tailFrom != null) 'tailFrom': tailFrom,
     if (tail.isNotEmpty) 'tail': [for (final s in tail) s.toJson()],
@@ -221,6 +237,7 @@ class BookPatch {
     'tracks': [for (final t in tracks) t.toJson()],
     if (nextPage != null) 'nextPage': nextPage,
     'position': position,
+    if (chapters.isNotEmpty) 'chapters': [for (final c in chapters) c.toJson()],
   };
 
   factory BookPatch.fromJson(Map<String, dynamic> j) => BookPatch(
@@ -239,6 +256,10 @@ class BookPatch {
     ],
     nextPage: j['nextPage'] as int?,
     position: j['position'] as int? ?? 0,
+    chapters: [
+      for (final c in (j['chapters'] as List? ?? const []))
+        Chapter.fromJson(c as Map<String, dynamic>),
+    ],
   );
 }
 
@@ -295,6 +316,7 @@ BookPatch buildPatch(
     ],
     nextPage: book.nextPage,
     position: bundle.position,
+    chapters: book.chapters,
   );
 }
 
@@ -312,6 +334,20 @@ bool _theirsWinsTrack(AudioTrack mine, AudioTrack theirs) {
     return theirs.updatedAt > mine.updatedAt;
   }
   return trackFingerprint(theirs).compareTo(trackFingerprint(mine)) > 0;
+}
+
+/// Both chapter lists together; where both start a chapter at the same
+/// sentence the greater title wins, so both devices end with the same list.
+/// A chapter removed on one device comes back from the other.
+List<Chapter> _joinChapters(List<Chapter> mine, List<Chapter> theirs) {
+  final byIndex = <int, Chapter>{};
+  for (final c in [...mine, ...theirs]) {
+    final o = byIndex[c.sentenceIndex];
+    if (o == null || c.title.compareTo(o.title) > 0) {
+      byIndex[c.sentenceIndex] = c;
+    }
+  }
+  return [for (final i in byIndex.keys.toList()..sort()) byIndex[i]!];
 }
 
 /// [mine] joined with what [patch] carries, judged item by item: the newer
@@ -424,6 +460,7 @@ BookBundle applyPatch(BookBundle mine, BookPatch patch) {
         for (final (_, t, lines, stamps) in translations)
           t.copyWith(lines: lines, stamps: stamps),
       ],
+      chapters: _joinChapters(book.chapters, patch.chapters),
       nextPage: pages.isEmpty ? null : pages.reduce(math.max),
       updatedAt: book.updatedAt,
     ),
