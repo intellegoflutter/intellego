@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../playback/audio_store.dart';
 import 'book_bundle.dart';
 import 'book_patch.dart';
 import 'sync_server.dart';
@@ -14,6 +17,9 @@ class SyncReport {
     this.sent = 0,
     this.unchanged = 0,
     this.skipped = const [],
+    this.audioReceived = 0,
+    this.audioSent = 0,
+    this.audioFailed = const [],
   });
 
   /// Books changed on this device, books changed on the other, and books that
@@ -24,15 +30,26 @@ class SyncReport {
   /// different texts under the same book.
   final List<String> skipped;
 
+  /// Audio files copied to this device and to the computer, and the ones
+  /// that could not be copied (with the reason).
+  final int audioReceived, audioSent;
+  final List<String> audioFailed;
+
   @override
   String toString() {
     final skippedNote = skipped.isEmpty
         ? ''
         : ' Left alone because the text differs: ${skipped.join(', ')}.';
+    final audioNote = audioReceived == 0 && audioSent == 0
+        ? ''
+        : ' Audio files: $audioReceived received, $audioSent sent.';
+    final failedNote = audioFailed.isEmpty
+        ? ''
+        : ' Audio not copied: ${audioFailed.join('; ')}.';
     return received == 0 && sent == 0
-        ? 'Already in sync ($unchanged books).$skippedNote'
+        ? 'Already in sync ($unchanged books).$skippedNote$audioNote$failedNote'
         : 'Done: $received updated here, $sent updated on the computer, '
-              '$unchanged unchanged.$skippedNote';
+              '$unchanged unchanged.$skippedNote$audioNote$failedNote';
   }
 }
 
@@ -72,6 +89,7 @@ class SyncClient {
     required this.server,
     required this.code,
     required this.store,
+    this.audio,
     http.Client? client,
     this.timeout = const Duration(seconds: 30),
   }) : _http = client ?? http.Client();
@@ -79,6 +97,9 @@ class SyncClient {
   final Uri server;
   final String code;
   final SyncStore store;
+
+  /// Where this device keeps audio files; without it no audio is copied.
+  final AudioStore? audio;
   final http.Client _http;
   final Duration timeout;
 
@@ -86,6 +107,29 @@ class SyncClient {
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       server.replace(path: path, queryParameters: query);
+
+  /// Sends [request] and gives the response as a stream; [wait] false for an
+  /// upload, which takes as long as the file needs.
+  Future<http.StreamedResponse> _sendStreamed(
+    http.BaseRequest request, {
+    bool wait = true,
+  }) async {
+    final http.StreamedResponse r;
+    try {
+      r = wait
+          ? await _http.send(request).timeout(timeout)
+          : await _http.send(request);
+    } catch (e) {
+      throw SyncException('Cannot reach $server: $e');
+    }
+    if (r.statusCode == 401) throw const SyncException('The code is wrong.');
+    if (r.statusCode == 429) {
+      throw const SyncException(
+        'Too many wrong codes: the computer refuses connections for a minute.',
+      );
+    }
+    return r;
+  }
 
   Future<http.Response> _send(Future<http.Response> request) async {
     final http.Response r;
@@ -107,7 +151,10 @@ class SyncClient {
     return r;
   }
 
-  Future<SyncReport> sync({void Function(String status)? onStatus}) async {
+  Future<SyncReport> sync({
+    void Function(String status)? onStatus,
+    bool withAudio = true,
+  }) async {
     onStatus?.call('Connecting…');
     final list = await _send(_http.get(_uri('/books'), headers: _headers));
     if (list.statusCode != 200) {
@@ -147,11 +194,17 @@ class SyncClient {
         }
       }
     }
+    final copied = audio == null || !withAudio
+        ? const _AudioResult()
+        : await _syncAudio(ids, onStatus);
     return SyncReport(
       received: received,
       sent: sent,
       unchanged: unchanged,
       skipped: skipped,
+      audioReceived: copied.received,
+      audioSent: copied.sent,
+      audioFailed: copied.failed,
     );
   }
 
@@ -271,7 +324,139 @@ class SyncClient {
     }
   }
 
+  /// Copies the audio files the books refer to, in whichever direction one
+  /// side has a file and the other does not. A file that fails does not stop
+  /// the others.
+  Future<_AudioResult> _syncAudio(
+    List<String> bookIds,
+    void Function(String status)? onStatus,
+  ) async {
+    final store = audio!;
+    final wanted = <String>{};
+    for (final id in bookIds) {
+      final bundle = await this.store.load(id);
+      if (bundle == null) continue;
+      for (final t in bundle.book.tracks) {
+        for (final p in t.parts) {
+          wanted.add(p.videoId);
+        }
+      }
+    }
+    final Map remote;
+    try {
+      remote = (await _getJson('/audio', 'the audio files'))['files'] as Map;
+    } on SyncException catch (e) {
+      // The books are in step already; an older computer has no audio to give.
+      return _AudioResult(failed: [e.message]);
+    }
+    final local = await store.all();
+    var received = 0, sent = 0;
+    final failed = <String>[];
+    var n = 0;
+    for (final id in wanted.toList()..sort()) {
+      final here = local[id], there = remote[id] as Map?;
+      if ((here != null) == (there != null)) continue;
+      n++;
+      final label = 'Audio file $n';
+      try {
+        if (!isSafeSyncId(id)) throw const SyncException('unusable name');
+        if (there != null) {
+          final ext = '${there['ext']}'.toLowerCase();
+          if (!isSafeAudioExtension(ext)) {
+            throw const SyncException('unusable file type');
+          }
+          await _download(id, ext, there['size'] as int, label, onStatus);
+          received++;
+        } else {
+          await _upload(id, here!, label, onStatus);
+          sent++;
+        }
+      } catch (e) {
+        failed.add('$id: $e');
+      }
+    }
+    return _AudioResult(received: received, sent: sent, failed: failed);
+  }
+
+  /// Reports progress as a percentage, only when it changes.
+  Stream<List<int>> _counted(
+    Stream<List<int>> data,
+    int total,
+    String label,
+    void Function(String status)? onStatus,
+  ) {
+    var done = 0, shown = -1;
+    return data.map((chunk) {
+      done += chunk.length;
+      final percent = total <= 0 ? 0 : done * 100 ~/ total;
+      if (percent != shown) {
+        shown = percent;
+        onStatus?.call('$label: $percent%');
+      }
+      return chunk;
+    });
+  }
+
+  Future<void> _download(
+    String id,
+    String ext,
+    int size,
+    String label,
+    void Function(String status)? onStatus,
+  ) async {
+    final request = http.Request('GET', _uri('/audio/$id'))
+      ..headers.addAll(_headers);
+    final response = await _sendStreamed(request);
+    if (response.statusCode != 200) {
+      throw SyncException('the computer answered ${response.statusCode}');
+    }
+    await audio!.saveStream(
+      id,
+      ext,
+      _counted(response.stream.timeout(timeout), size, label, onStatus),
+      expectedLength: size,
+    );
+  }
+
+  Future<void> _upload(
+    String id,
+    File file,
+    String label,
+    void Function(String status)? onStatus,
+  ) async {
+    final length = await file.length();
+    final dot = file.path.lastIndexOf('.');
+    final ext = dot < 0 ? 'm4a' : file.path.substring(dot + 1).toLowerCase();
+    final request =
+        http.StreamedRequest('PUT', _uri('/audio/$id', {'ext': ext}))
+          ..headers.addAll(_headers)
+          ..contentLength = length;
+    final sending = _counted(
+      file.openRead(),
+      length,
+      label,
+      onStatus,
+    ).pipe(request.sink);
+    final responseFuture = _sendStreamed(request, wait: false);
+    await Future.wait([sending, responseFuture], eagerError: true);
+    final response = await responseFuture;
+    if (response.statusCode != 204 && response.statusCode != 200) {
+      throw SyncException('the computer answered ${response.statusCode}');
+    }
+  }
+
   void close() => _http.close();
 }
 
 enum _Outcome { unchanged, changed, differentText }
+
+class _AudioResult {
+  const _AudioResult({
+    this.received = 0,
+    this.sent = 0,
+    this.failed = const [],
+  });
+
+  final int received, sent;
+  final List<String> failed;
+}

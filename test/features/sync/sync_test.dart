@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:intellego/data/book.dart';
 import 'package:intellego/data/book_repository.dart';
 import 'package:intellego/data/book_stamps.dart';
+import 'package:intellego/features/playback/audio_store.dart';
 import 'package:intellego/features/speaking/speaking_log.dart';
 import 'package:intellego/features/sync/book_bundle.dart';
 import 'package:intellego/features/youtube/caption_models.dart';
@@ -74,6 +75,8 @@ BookPatch _all(BookBundle b) => buildPatch(
 );
 
 String _json(BookBundle b) => jsonEncode(b.toJson());
+
+AudioStore _audioIn(Directory dir) => AudioStore(root: dir);
 
 void main() {
   group('stamping saved changes', () {
@@ -396,6 +399,114 @@ void main() {
         ),
         ['uk'],
       );
+    });
+  });
+
+  group('audio files', () {
+    late _MemoryStore desktop, phone;
+    late Directory desktopDir, phoneDir, tmp;
+    late AudioStore desktopAudio, phoneAudio;
+    late SyncServer server;
+    late Uri address;
+
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('sync_audio');
+      desktopDir = await Directory('${tmp.path}/desktop').create();
+      phoneDir = await Directory('${tmp.path}/phone').create();
+      desktopAudio = _audioIn(desktopDir);
+      phoneAudio = _audioIn(phoneDir);
+      desktop = _MemoryStore();
+      phone = _MemoryStore();
+      // Both have a book that refers to the audio of the video "v".
+      final book = _book(tracks: [_track('ru', 1)]);
+      desktop.bundles['1'] = _bundle(book);
+      phone.bundles['1'] = _bundle(book);
+      server = SyncServer(
+        store: desktop,
+        code: 'ABCDEFGH',
+        audio: desktopAudio,
+      );
+      address = Uri.parse('http://127.0.0.1:${await server.start(port: 0)}');
+    });
+
+    tearDown(() async {
+      await server.stop();
+      await tmp.delete(recursive: true);
+    });
+
+    SyncClient client({AudioStore? audio}) => SyncClient(
+      server: address,
+      code: 'ABCDEFGH',
+      store: phone,
+      audio: audio ?? phoneAudio,
+    );
+
+    Future<File> put(AudioStore store, String id, List<int> bytes) async {
+      final dir = await store.dir;
+      return File('${dir.path}/$id.m4a').writeAsBytes(bytes);
+    }
+
+    test('a file only the computer has is copied to the phone, once', () async {
+      final bytes = List.generate(300000, (i) => i % 251);
+      await put(desktopAudio, 'v', bytes);
+      final first = await client().sync();
+      expect((first.audioReceived, first.audioSent), (1, 0));
+      expect(first.audioFailed, isEmpty);
+      expect(await (await phoneAudio.find('v'))!.readAsBytes(), bytes);
+      final second = await client().sync();
+      expect((second.audioReceived, second.audioSent), (0, 0));
+    });
+
+    test('a file only the phone has is copied to the computer', () async {
+      final bytes = List.generate(200000, (i) => (i * 7) % 256);
+      await put(phoneAudio, 'v', bytes);
+      final report = await client().sync();
+      expect((report.audioReceived, report.audioSent), (0, 1));
+      expect(await (await desktopAudio.find('v'))!.readAsBytes(), bytes);
+    });
+
+    test('audio no book refers to stays where it is', () async {
+      await put(desktopAudio, 'other', [1, 2, 3]);
+      final report = await client().sync();
+      expect(report.audioReceived, 0);
+      expect(await phoneAudio.find('other'), isNull);
+    });
+
+    test('nothing is copied when the audio is switched off', () async {
+      await put(desktopAudio, 'v', [1, 2, 3]);
+      final report = await client().sync(withAudio: false);
+      expect(report.audioReceived, 0);
+      expect(await phoneAudio.find('v'), isNull);
+    });
+
+    test('a computer without audio support does not fail the sync', () async {
+      await server.stop();
+      server = SyncServer(store: desktop, code: 'ABCDEFGH');
+      address = Uri.parse('http://127.0.0.1:${await server.start(port: 0)}');
+      final report = await client().sync();
+      expect(report.audioFailed, hasLength(1));
+      expect('$report', contains('Audio not copied'));
+    });
+
+    test('the server refuses odd names and file types', () async {
+      Future<int> put_(String path) async {
+        final r = await http.put(
+          address.replace(
+            path: path.split('?').first,
+            query: path.contains('?') ? path.split('?').last : null,
+          ),
+          headers: {'Authorization': 'Bearer ABCDEFGH'},
+          body: [1, 2, 3],
+        );
+        return r.statusCode;
+      }
+
+      expect(await put_('/audio/v?ext=../x'), 400);
+      expect(await put_('/audio/v?ext=toolongext'), 400);
+      expect(await put_('/audio/v'), 400);
+      expect(await put_('/audio/v?ext=m4a'), 204);
+      expect(await put_('/audio/v?ext=m4a'), 409);
+      expect(await desktopAudio.find('v'), isNotNull);
     });
   });
 

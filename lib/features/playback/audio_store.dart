@@ -36,6 +36,47 @@ class AudioStore {
     return source.copy('${(await dir).path}/$videoId.$ext');
   }
 
+  /// Every stored audio file by video id.
+  Future<Map<String, File>> all() async {
+    final found = <String, File>{};
+    await for (final e in (await dir).list()) {
+      if (e is! File) continue;
+      final name = e.uri.pathSegments.last;
+      final dot = name.indexOf('.');
+      if (dot > 0 && !name.endsWith('.part')) found[name.substring(0, dot)] = e;
+    }
+    return found;
+  }
+
+  /// Stores [data] as the audio of [videoId] with extension [ext]. It is
+  /// written under a temporary name and only put in place when it is whole:
+  /// [expectedLength] bytes, if given.
+  Future<File> saveStream(
+    String videoId,
+    String ext,
+    Stream<List<int>> data, {
+    int? expectedLength,
+  }) async {
+    final folder = (await dir).path;
+    final part = File('$folder/$videoId.$ext.part');
+    try {
+      final sink = part.openWrite();
+      try {
+        await sink.addStream(data);
+      } finally {
+        await sink.close();
+      }
+      if (expectedLength != null && await part.length() != expectedLength) {
+        throw const FormatException('The audio file did not arrive whole.');
+      }
+      await delete(videoId);
+      return await part.rename('$folder/$videoId.$ext');
+    } catch (_) {
+      if (await part.exists()) await part.delete();
+      rethrow;
+    }
+  }
+
   Future<void> delete(String videoId) async {
     final f = await find(videoId);
     if (f != null) await f.delete();

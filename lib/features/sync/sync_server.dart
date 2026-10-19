@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import '../playback/audio_store.dart';
 import 'book_bundle.dart';
 import 'book_patch.dart';
 import 'sync_store.dart';
@@ -14,7 +15,18 @@ const defaultSyncPort = 8765;
 /// also keeps ids from reaching outside the books folder.
 final _validId = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
 
+/// Whether [id] (a book id or a video id) is safe to use in a file name.
+bool isSafeSyncId(String id) => _validId.hasMatch(id);
+
 const _maxBody = 64 * 1024 * 1024;
+
+/// The largest audio file the server accepts.
+const _maxAudio = 4 * 1024 * 1024 * 1024;
+
+final _validExtension = RegExp(r'^[a-z0-9]{1,5}$');
+
+/// Whether [ext] is safe to use as a file extension.
+bool isSafeAudioExtension(String ext) => _validExtension.hasMatch(ext);
 
 /// After this many wrong codes in a row the server refuses everything for
 /// [lockout].
@@ -45,11 +57,17 @@ String normalizeSyncCode(String code) =>
 ///  * `GET /books/<id>/prefix?upto=<n>` hashes the first n sentence texts,
 ///  * `POST /books/<id>/pull` returns the sections, audiobooks and sentences
 ///    asked for as a [BookPatch],
-///  * `POST /books/<id>/push` merges the sent [BookPatch] into the book.
+///  * `POST /books/<id>/push` merges the sent [BookPatch] into the book,
+///  * `GET /audio` lists the audio files by video id (extension and size),
+///  * `GET /audio/<video id>` sends one audio file,
+///  * `PUT /audio/<video id>?ext=m4a` stores one the server does not have.
+///
+/// The audio endpoints answer 404 unless the server was given an [audio] store.
 class SyncServer {
   SyncServer({
     required this.store,
     required String code,
+    this.audio,
     this.onChanged,
     this.lockout = const Duration(minutes: 1),
     DateTime Function()? clock,
@@ -57,6 +75,7 @@ class SyncServer {
        _now = clock ?? DateTime.now;
 
   final SyncStore store;
+  final AudioStore? audio;
   final String _code;
   final Duration lockout;
   final DateTime Function() _now;
@@ -142,6 +161,10 @@ class SyncServer {
     try {
       if (!_authorise(request)) return;
       final segments = request.uri.pathSegments;
+      if (segments.isNotEmpty && segments.first == 'audio') {
+        await _audioFiles(request, segments);
+        return;
+      }
       if (segments.isEmpty ||
           segments.first != 'books' ||
           segments.length > 3) {
@@ -178,6 +201,67 @@ class SyncServer {
       response.statusCode = HttpStatus.internalServerError;
     } finally {
       await response.close();
+    }
+  }
+
+  Future<void> _audioFiles(HttpRequest request, List<String> segments) async {
+    final response = request.response;
+    final store = audio;
+    if (store == null || segments.length > 2) {
+      response.statusCode = HttpStatus.notFound;
+      return;
+    }
+    if (segments.length == 1) {
+      if (request.method != 'GET') {
+        response.statusCode = HttpStatus.methodNotAllowed;
+        return;
+      }
+      final files = await store.all();
+      _json(response, {
+        'files': {
+          for (final e in files.entries)
+            e.key: {
+              'ext': e.value.path.substring(e.value.path.lastIndexOf('.') + 1),
+              'size': await e.value.length(),
+            },
+        },
+      });
+      return;
+    }
+    final id = segments[1];
+    if (!_validId.hasMatch(id)) {
+      response.statusCode = HttpStatus.badRequest;
+      return;
+    }
+    switch (request.method) {
+      case 'GET':
+        final file = (await store.all())[id];
+        if (file == null) {
+          response.statusCode = HttpStatus.notFound;
+          return;
+        }
+        response.headers.contentType = ContentType.binary;
+        response.contentLength = await file.length();
+        await response.addStream(file.openRead());
+      case 'PUT':
+        final ext = (request.uri.queryParameters['ext'] ?? '').toLowerCase();
+        final length = request.contentLength;
+        if (!_validExtension.hasMatch(ext) ||
+            length <= 0 ||
+            length > _maxAudio) {
+          response.statusCode = HttpStatus.badRequest;
+          return;
+        }
+        await _exclusive(() async {
+          if ((await store.all()).containsKey(id)) {
+            response.statusCode = HttpStatus.conflict;
+            return;
+          }
+          await store.saveStream(id, ext, request, expectedLength: length);
+          response.statusCode = HttpStatus.noContent;
+        });
+      default:
+        response.statusCode = HttpStatus.methodNotAllowed;
     }
   }
 

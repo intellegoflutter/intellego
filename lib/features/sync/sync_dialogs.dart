@@ -99,6 +99,7 @@ class _SyncNowDialogState extends ConsumerState<SyncNowDialog> {
   bool _busy = false;
   String _status = '';
   bool _failed = false;
+  bool _withAudio = true;
 
   @override
   void initState() {
@@ -138,8 +139,10 @@ class _SyncNowDialogState extends ConsumerState<SyncNowDialog> {
         server: server,
         code: code,
         store: await ref.read(syncStoreProvider.future),
+        audio: ref.read(audioStoreProvider),
       );
       final report = await client.sync(
+        withAudio: _withAudio,
         onStatus: (s) {
           if (mounted) setState(() => _status = s);
         },
@@ -153,6 +156,7 @@ class _SyncNowDialogState extends ConsumerState<SyncNowDialog> {
       }
       ref.invalidate(booksProvider);
       ref.invalidate(speakingLogProvider);
+      ref.invalidate(audioFileProvider);
       if (mounted) setState(() => _status = '$report');
     } catch (e) {
       if (mounted) {
@@ -214,6 +218,19 @@ class _SyncNowDialogState extends ConsumerState<SyncNowDialog> {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9 -]')),
                 ],
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _withAudio,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _withAudio = v ?? true),
+                title: const Text('Also copy the audio files'),
+                subtitle: const Text(
+                  'Large: an audiobook is about 180 MB. Only files the other '
+                  'side does not have are copied.',
+                ),
               ),
             ],
           ),

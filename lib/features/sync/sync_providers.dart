@@ -57,6 +57,7 @@ class SyncServerController extends Notifier<SyncServerState> {
       final code = await _code(fresh: newCode);
       final server = SyncServer(
         store: await ref.read(syncStoreProvider.future),
+        audio: ref.read(audioStoreProvider),
         code: code,
         onChanged: (id) {
           ref.invalidate(booksProvider);
