@@ -460,6 +460,23 @@ class Book {
     );
   }
 
+  /// The Russian sentence being spoken at [ms] in part [part] of track
+  /// [track]: the last aligned one that starts at or before that point. Null
+  /// before the first aligned sentence.
+  int? sentenceAt(int track, int part, int ms) {
+    if (track >= tracks.length) return null;
+    final t = tracks[track];
+    if (part >= t.parts.length) return null;
+    final at = t.indexAt(ms, part: part);
+    if (at == null) return null;
+    final a = t.alignment;
+    int? found;
+    for (var i = 0; i < a.length && i < sentences.length; i++) {
+      if (a.hasAudio(i) && a.from[i]! <= at) found = i;
+    }
+    return found;
+  }
+
   Book _copy({
     List<BookSentence>? sentences,
     List<AudioTrack>? tracks,

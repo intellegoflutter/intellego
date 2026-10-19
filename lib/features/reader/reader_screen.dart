@@ -15,6 +15,7 @@ import '../library/add_pages_dialog.dart';
 import '../library/link_audio_screen.dart';
 import '../library/track_picker.dart';
 import '../playback/audio_downloader.dart';
+import '../playback/passive_listening.dart';
 import '../search/search_screen.dart';
 import '../speaking/asr_model_store.dart';
 import '../translate/language_codes.dart';
@@ -60,6 +61,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   int? _startIndex;
   int? _flash;
   Timer? _flashTimer;
+
+  /// Whether the list scrolls along with "listen from here".
+  bool _follow = true;
   int _topIndex = 0;
   Timer? _saveTimer;
 
@@ -234,7 +238,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     }
   }
 
+  Future<void> _listenFromHere(Book book) async {
+    final track = await pickTrack(
+      context,
+      book,
+      title: 'Listen to which audiobook?',
+    );
+    if (track == null) return;
+    setState(() {
+      _playing = null;
+      _follow = true;
+    });
+    await ref
+        .read(passiveListeningProvider.notifier)
+        .start(book, track, _topIndex);
+  }
+
   Future<void> _play(Book book, int i, int track) async {
+    await ref.read(passiveListeningProvider.notifier).stop();
     final seg = book.audioSegmentFor(i, track);
     if (seg == null) return;
     final file = await ref.read(audioFileProvider(seg.videoId).future);
@@ -268,6 +289,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       return;
     }
     if (_recordingIndex != null) return;
+    await ref.read(passiveListeningProvider.notifier).stop();
     final store = ref.read(asrModelStoreProvider);
     if (!await store.isInstalled()) {
       if (!await _downloadSpeechModel(store)) return;
@@ -490,6 +512,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       return;
     }
     await speaker.stop();
+    await ref.read(passiveListeningProvider.notifier).stop();
     await ref.read(segmentPlayerProvider).pause();
     if (mounted) {
       setState(() {
@@ -819,6 +842,23 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       return Scaffold(appBar: AppBar(), body: const SizedBox.shrink());
     }
     final hasAudio = book.hasAudio;
+    final passive = ref.watch(passiveListeningProvider);
+    final listening = passive.bookId == book.id ? passive : null;
+    ref.listen(passiveListeningProvider, (before, now) {
+      if (now.bookId == widget.bookId &&
+          _follow &&
+          now.sentence != null &&
+          now.sentence != before?.sentence &&
+          _scroll.isAttached) {
+        _scroll.scrollTo(
+          index: now.sentence!,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
+      final message = now.message;
+      if (message != null && message != before?.message) _toast(message);
+    });
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -834,6 +874,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           ],
         ),
         actions: [
+          if (hasAudio)
+            IconButton(
+              tooltip: 'Listen from here',
+              icon: const Icon(Icons.play_circle_outline),
+              onPressed: () => _listenFromHere(book),
+            ),
           IconButton(
             tooltip: 'Search',
             icon: const Icon(Icons.search),
@@ -1020,9 +1066,60 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               children: [
                 if (hasAudio) _audioBanner(book),
                 Expanded(child: _list(book)),
+                if (listening != null) _listeningBar(book, listening),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _listeningBar(Book book, PassiveState state) {
+    final notifier = ref.read(passiveListeningProvider.notifier);
+    final label = book.tracks[state.track].label;
+    return Material(
+      elevation: 8,
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '$label · sentence ${(state.sentence ?? 0) + 1}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Previous sentence',
+              icon: const Icon(Icons.skip_previous),
+              onPressed: () => notifier.skip(-1),
+            ),
+            IconButton(
+              tooltip: state.playing ? 'Pause' : 'Play',
+              icon: Icon(state.playing ? Icons.pause : Icons.play_arrow),
+              onPressed: notifier.togglePlay,
+            ),
+            IconButton(
+              tooltip: 'Next sentence',
+              icon: const Icon(Icons.skip_next),
+              onPressed: () => notifier.skip(1),
+            ),
+            IconButton(
+              tooltip: _follow ? 'Stop following' : 'Follow the audio',
+              isSelected: _follow,
+              icon: const Icon(Icons.my_location_outlined),
+              selectedIcon: const Icon(Icons.my_location),
+              onPressed: () => setState(() => _follow = !_follow),
+            ),
+            IconButton(
+              tooltip: 'Stop listening',
+              icon: const Icon(Icons.close),
+              onPressed: notifier.stop,
+            ),
+          ],
         ),
       ),
     );
@@ -1097,6 +1194,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   Widget _list(Book book) {
     final attempts = ref.watch(speakingLogProvider(book.id)).value;
+    final passive = ref.watch(passiveListeningProvider);
+    final listening = passive.bookId == book.id ? passive : null;
     final start = _startIndex;
     if (start == null) return const SizedBox.shrink();
     final fontSize = ref.watch(readerFontSizeProvider);
@@ -1119,7 +1218,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         fontSize: fontSize,
         flash: _flash == i,
         onChapter: (action) => _chapterAction(book, i, action),
-        playing: _playing == i ? _playingTrack : null,
+        playing: _playing == i
+            ? _playingTrack
+            : (listening?.sentence == i ? listening!.track : null),
         speaking: _speakingIndex == i ? _speakingLanguage : null,
         onSpeak: (text, language) => _speak(i, text, language: language),
         recording: _recordingIndex == i,
