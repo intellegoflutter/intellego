@@ -10,10 +10,12 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../app/providers.dart';
 import '../../data/book.dart';
+import '../chapters/chapters_sheet.dart';
 import '../library/add_pages_dialog.dart';
 import '../library/link_audio_screen.dart';
 import '../library/track_picker.dart';
 import '../playback/audio_downloader.dart';
+import '../search/search_screen.dart';
 import '../speaking/asr_model_store.dart';
 import '../translate/language_codes.dart';
 import '../translate/sentence_translator.dart';
@@ -28,9 +30,12 @@ import 'translations_dialogs.dart';
 import 'ukrainian_text_tools.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
-  const ReaderScreen({super.key, required this.bookId});
+  const ReaderScreen({super.key, required this.bookId, this.initialIndex});
 
   final String bookId;
+
+  /// Sentence to open at; the saved reading position when null.
+  final int? initialIndex;
 
   @override
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();
@@ -51,7 +56,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   final _translating = ValueNotifier<bool>(false);
 
   final _positions = ItemPositionsListener.create();
+  final _scroll = ItemScrollController();
   int? _startIndex;
+  int? _flash;
+  Timer? _flashTimer;
   int _topIndex = 0;
   Timer? _saveTimer;
 
@@ -117,16 +125,99 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onKey);
     _positions.itemPositions.addListener(_onScrolled);
-    ReadingPosition.load(widget.bookId).then((i) {
-      if (mounted) setState(() => _startIndex = i);
+    final given = widget.initialIndex;
+    if (given != null) {
+      _startIndex = given;
+      _topIndex = given;
+    } else {
+      ReadingPosition.load(widget.bookId).then((i) {
+        if (mounted) setState(() => _startIndex = i);
+      });
+    }
+  }
+
+  /// Scrolls to sentence [i] and briefly tints it.
+  void _jumpTo(int i) {
+    if (!_scroll.isAttached) return;
+    _scroll.scrollTo(
+      index: i,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+    setState(() => _flash = i);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flash = null);
     });
   }
 
+  Future<void> _openChapters(Book book) async {
+    final to = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => ChaptersSheet(bookId: book.id, current: _topIndex),
+    );
+    if (to != null) _jumpTo(to);
+  }
+
+  Future<void> _openSearch(Book book) async {
+    final to = await Navigator.of(context).push<int>(
+      MaterialPageRoute(builder: (_) => SearchScreen(bookId: book.id)),
+    );
+    if (to != null) _jumpTo(to);
+  }
+
+  Future<void> _chapterAction(Book book, int i, String action) async {
+    final existing = book.chapters.where((c) => c.sentenceIndex == i);
+    if (action == 'remove') {
+      await ref
+          .read(booksProvider.notifier)
+          .updateBook(
+            book.withChapters([
+              for (final c in book.chapters)
+                if (c.sentenceIndex != i) c,
+            ]),
+          );
+      return;
+    }
+    final title = await askChapterTitle(
+      context,
+      initial: existing.isEmpty
+          ? book.sentences[i].text
+                .replaceAll(RegExp(r'[.\s]+$'), '')
+                .characters
+                .take(60)
+                .toString()
+          : existing.first.title,
+    );
+    if (title == null || title.isEmpty) return;
+    await ref
+        .read(booksProvider.notifier)
+        .updateBook(
+          book.withChapters([
+            for (final c in book.chapters)
+              if (c.sentenceIndex != i) c,
+            Chapter(title: title, sentenceIndex: i),
+          ]),
+        );
+  }
+
   void _onScrolled() {
+    final before = _topIndex;
     _topIndex = topVisibleIndex([
       for (final p in _positions.itemPositions.value)
         (p.index, p.itemTrailingEdge),
     ]);
+    final book = ref
+        .read(booksProvider)
+        .value
+        ?.where((b) => b.id == widget.bookId)
+        .firstOrNull;
+    // The app bar shows the current chapter; refresh it when that changes.
+    if (book != null && book.chapterAt(before) != book.chapterAt(_topIndex)) {
+      setState(() {});
+    }
     _saveTimer?.cancel();
     _saveTimer = Timer(
       const Duration(milliseconds: 600),
@@ -372,6 +463,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     WidgetsBinding.instance.removeObserver(this);
     _positions.itemPositions.removeListener(_onScrolled);
     _saveTimer?.cancel();
+    _flashTimer?.cancel();
     _translating.dispose();
     if (_startIndex != null) ReadingPosition.save(widget.bookId, _topIndex);
     if (_recordingIndex != null) unawaited(_recorder?.stop());
@@ -729,8 +821,29 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final hasAudio = book.hasAudio;
     return Scaffold(
       appBar: AppBar(
-        title: Text(book.title, overflow: TextOverflow.ellipsis),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(book.title, overflow: TextOverflow.ellipsis),
+            if (book.chapterAt(_topIndex) != null)
+              Text(
+                book.chapterAt(_topIndex)!.title,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+          ],
+        ),
         actions: [
+          IconButton(
+            tooltip: 'Search',
+            icon: const Icon(Icons.search),
+            onPressed: () => _openSearch(book),
+          ),
+          IconButton(
+            tooltip: 'Chapters',
+            icon: const Icon(Icons.format_list_bulleted),
+            onPressed: () => _openChapters(book),
+          ),
           if (!hasAudio)
             IconButton(
               tooltip: 'Link audiobook (YouTube)',
@@ -988,6 +1101,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     if (start == null) return const SizedBox.shrink();
     final fontSize = ref.watch(readerFontSizeProvider);
     return ScrollablePositionedList.separated(
+      itemScrollController: _scroll,
       itemPositionsListener: _positions,
       // Not while pinching or while Ctrl is held: the wheel changes the size.
       physics: _pinching || _ctrlDown
@@ -1003,6 +1117,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         index: i,
         book: book,
         fontSize: fontSize,
+        flash: _flash == i,
+        onChapter: (action) => _chapterAction(book, i, action),
         playing: _playing == i ? _playingTrack : null,
         speaking: _speakingIndex == i ? _speakingLanguage : null,
         onSpeak: (text, language) => _speak(i, text, language: language),
@@ -1034,6 +1150,8 @@ class _SentenceTile extends StatelessWidget {
     required this.index,
     required this.book,
     required this.fontSize,
+    required this.flash,
+    required this.onChapter,
     required this.playing,
     required this.speaking,
     required this.onSpeak,
@@ -1055,6 +1173,12 @@ class _SentenceTile extends StatelessWidget {
 
   /// Size of every language line; labels and hints are scaled from it.
   final double fontSize;
+
+  /// Tinted for a moment after a jump here (search, chapters).
+  final bool flash;
+
+  /// 'set' (add or rename) or 'remove' the chapter that starts here.
+  final void Function(String action) onChapter;
 
   /// Index of the track whose audio of this sentence is playing, if any.
   final int? playing;
@@ -1125,8 +1249,13 @@ class _SentenceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final s = book.sentences[index];
+    final chapter = book.chapters
+        .where((c) => c.sentenceIndex == index)
+        .firstOrNull;
     return Material(
-      color: playing != null
+      color: flash
+          ? theme.colorScheme.tertiaryContainer
+          : playing != null
           ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4)
           : null,
       child: InkWell(
@@ -1144,6 +1273,17 @@ class _SentenceTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (chapter != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          chapter.title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     Text.rich(
                       TextSpan(
                         children: [
@@ -1288,6 +1428,8 @@ class _SentenceTile extends StatelessWidget {
                   if (v == 'sync') onSync();
                   if (v == 'translate') onTranslate();
                   if (v == 'translateAll') onTranslateAll();
+                  if (v == 'chapter') onChapter('set');
+                  if (v == 'noChapter') onChapter('remove');
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(
@@ -1309,6 +1451,19 @@ class _SentenceTile extends StatelessWidget {
                     const PopupMenuItem(
                       value: 'sync',
                       child: Text('Sync here (audio is at this sentence)'),
+                    ),
+                  PopupMenuItem(
+                    value: 'chapter',
+                    child: Text(
+                      chapter == null
+                          ? 'Start a chapter here…'
+                          : 'Rename this chapter…',
+                    ),
+                  ),
+                  if (chapter != null)
+                    const PopupMenuItem(
+                      value: 'noChapter',
+                      child: Text('Remove this chapter'),
                     ),
                 ],
               ),

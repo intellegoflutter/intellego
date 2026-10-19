@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../reader/reader_screen.dart';
+import '../search/library_search_screen.dart';
 import '../sync/sync_dialogs.dart';
 import 'add_pages_dialog.dart';
 import 'import_screen.dart';
@@ -21,6 +22,15 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Intellego'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search all books',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const LibrarySearchScreen(),
+              ),
+            ),
+          ),
           IconButton(
             icon: Icon(Platform.isAndroid ? Icons.sync : Icons.wifi_tethering),
             tooltip: Platform.isAndroid ? 'Sync now' : 'Sync with the phone',

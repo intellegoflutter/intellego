@@ -338,6 +338,28 @@ class Translation {
   );
 }
 
+/// A named point in the book where a chapter begins.
+class Chapter {
+  const Chapter({required this.title, required this.sentenceIndex});
+
+  final String title;
+  final int sentenceIndex;
+
+  Map<String, dynamic> toJson() => {'title': title, 'at': sentenceIndex};
+
+  factory Chapter.fromJson(Map<String, dynamic> j) =>
+      Chapter(title: j['title'] as String, sentenceIndex: j['at'] as int);
+
+  @override
+  bool operator ==(Object other) =>
+      other is Chapter &&
+      other.title == title &&
+      other.sentenceIndex == sentenceIndex;
+
+  @override
+  int get hashCode => Object.hash(title, sentenceIndex);
+}
+
 class Book {
   const Book({
     required this.id,
@@ -347,6 +369,7 @@ class Book {
     this.sourceUrl,
     this.tracks = const [],
     this.translations = const [],
+    this.chapters = const [],
     this.nextPage,
     this.updatedAt,
   });
@@ -361,6 +384,9 @@ class Book {
   final List<AudioTrack> tracks;
   final List<Translation> translations;
 
+  /// Where chapters begin, ordered by sentence index.
+  final List<Chapter> chapters;
+
   /// loveread books: the first page that has not been imported yet.
   final int? nextPage;
 
@@ -372,6 +398,16 @@ class Book {
   int get practicedCount => sentences.where((s) => s.practiced).length;
 
   bool get hasAudio => tracks.isNotEmpty;
+
+  /// The chapter that sentence [i] belongs to, or null before the first one.
+  Chapter? chapterAt(int i) {
+    Chapter? found;
+    for (final c in chapters) {
+      if (c.sentenceIndex > i) break;
+      found = c;
+    }
+    return found;
+  }
 
   /// Index of the track in [language], or null.
   int? trackIndexOf(String language) {
@@ -428,6 +464,7 @@ class Book {
     List<BookSentence>? sentences,
     List<AudioTrack>? tracks,
     List<Translation>? translations,
+    List<Chapter>? chapters,
     int? nextPage,
     DateTime? updatedAt,
   }) => Book(
@@ -438,6 +475,7 @@ class Book {
     sentences: sentences ?? this.sentences,
     tracks: tracks ?? this.tracks,
     translations: translations ?? this.translations,
+    chapters: chapters ?? this.chapters,
     nextPage: nextPage ?? this.nextPage,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -449,6 +487,14 @@ class Book {
   Book withTranslations(List<Translation> next) => _copy(translations: next);
 
   Book withTracks(List<AudioTrack> next) => _copy(tracks: next);
+
+  /// Replaces the chapters; they are kept ordered, one per sentence.
+  Book withChapters(List<Chapter> next) {
+    final byIndex = {for (final c in next) c.sentenceIndex: c};
+    return _copy(
+      chapters: [for (final i in byIndex.keys.toList()..sort()) byIndex[i]!],
+    );
+  }
 
   /// [track] replaces the one at [index], or is added when [index] is null.
   Book withTrack(AudioTrack track, {int? index}) => withTracks([
@@ -484,6 +530,7 @@ class Book {
     if (tracks.isNotEmpty) 'audioTracks': [for (final t in tracks) t.toJson()],
     if (translations.isNotEmpty)
       'translations': [for (final t in translations) t.toJson()],
+    if (chapters.isNotEmpty) 'chapters': [for (final c in chapters) c.toJson()],
   };
 
   factory Book.fromJson(Map<String, dynamic> j) {
@@ -529,6 +576,10 @@ class Book {
       translations: [
         for (final t in (j['translations'] as List? ?? const []))
           Translation.fromJson(t as Map<String, dynamic>),
+      ],
+      chapters: [
+        for (final c in (j['chapters'] as List? ?? const []))
+          Chapter.fromJson(c as Map<String, dynamic>),
       ],
       nextPage: j['nextPage'] as int?,
       updatedAt: j['updatedAt'] == null

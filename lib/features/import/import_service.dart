@@ -1,4 +1,5 @@
 import '../../data/book.dart';
+import '../chapters/chapter_detection.dart';
 import '../nlp/accent/accentuator.dart';
 import '../nlp/sentences/sentence_splitter.dart';
 import 'loveread_source.dart';
@@ -30,6 +31,7 @@ class ImportService {
     return _build(
       title: page.title.isEmpty ? url.host : page.title,
       paragraphs: page.paragraphs,
+      headings: page.headings,
       sourceUrl: url.toString(),
       accentuator: accentuator,
       stress: stress,
@@ -122,7 +124,10 @@ class ImportService {
       offset,
       onProcessProgress,
     );
-    return book.appended(added, nextPage: more.nextPage);
+    final grown = book.appended(added, nextPage: more.nextPage);
+    return grown.withChapters(
+      mergeChapters(grown.chapters, detectChapters(grown.sentences)),
+    );
   }
 
   Future<List<BookSentence>> _sentences(
@@ -162,6 +167,7 @@ class ImportService {
     required Accentuator? accentuator,
     required bool stress,
     required bool yo,
+    Set<int> headings = const {},
     ProcessProgress? onProcessProgress,
   }) async {
     final sentences = await _sentences(
@@ -179,6 +185,10 @@ class ImportService {
       sourceUrl: sourceUrl,
       createdAt: now,
       sentences: sentences,
+      chapters: mergeChapters(
+        chaptersFromHeadings(sentences, headings),
+        detectChapters(sentences),
+      ),
     );
   }
 }
