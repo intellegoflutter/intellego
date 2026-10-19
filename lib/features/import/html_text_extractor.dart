@@ -2,10 +2,18 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
 class ExtractedText {
-  const ExtractedText({required this.title, required this.paragraphs});
+  const ExtractedText({
+    required this.title,
+    required this.paragraphs,
+    this.headings = const {},
+  });
 
   final String title;
   final List<String> paragraphs;
+
+  /// Indices into [paragraphs] of the h2/h3 headings (and of an h1 that is
+  /// not the page title).
+  final Set<int> headings;
 }
 
 const _noiseTags = [
@@ -43,11 +51,21 @@ class HtmlTextExtractor {
             .where((e) => !_hasBlockAncestorInside(e, container)) ??
         const <Element>[];
     final paragraphs = <String>[];
+    final headings = <int>{};
     for (final b in blocks) {
       final t = _clean(b.text);
-      if (t.isNotEmpty) paragraphs.add(t);
+      if (t.isEmpty) continue;
+      final tag = b.localName;
+      if (tag == 'h2' || tag == 'h3' || (tag == 'h1' && t != title)) {
+        headings.add(paragraphs.length);
+      }
+      paragraphs.add(t);
     }
-    return ExtractedText(title: title, paragraphs: paragraphs);
+    return ExtractedText(
+      title: title,
+      paragraphs: paragraphs,
+      headings: headings,
+    );
   }
 
   String _title(Document doc) {
