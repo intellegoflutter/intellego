@@ -48,6 +48,7 @@ dependencies:
   google_mlkit_translation: ^0.15.1
   flutter_tts: ^4.2.5
   just_audio_background: ^0.0.1-beta.17
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

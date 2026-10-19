@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../reader/reader_screen.dart';
 import '../search/library_search_screen.dart';
+import '../words/practice_screen.dart';
 import '../sync/sync_dialogs.dart';
 import 'add_pages_dialog.dart';
 import 'import_screen.dart';
@@ -22,6 +23,28 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Intellego'),
         actions: [
+          Builder(
+            builder: (context) {
+              final due = ref
+                  .watch(vocabProvider)
+                  .value
+                  ?.where((e) => e.isDue(DateTime.now()))
+                  .length;
+              return IconButton(
+                tooltip: 'Practice words',
+                icon: Badge(
+                  isLabelVisible: (due ?? 0) > 0,
+                  label: Text('$due'),
+                  child: const Icon(Icons.school_outlined),
+                ),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PracticeScreen(),
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'Search all books',
