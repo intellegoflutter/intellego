@@ -16,6 +16,46 @@ import 'track_picker.dart';
 /// Phones and tablets ask the computer for a sync; the computer serves it.
 final _isMobile = Platform.isAndroid || Platform.isIOS;
 
+/// Opens the sync dialog for this device's role. Android asks the computer;
+/// a computer serves; an iPad can do either, so the person chooses.
+Future<void> _openSync(BuildContext context) async {
+  final bool asClient;
+  if (Platform.isIOS) {
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Sync'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, true),
+            child: const ListTile(
+              leading: Icon(Icons.sync),
+              title: Text('Connect to another device'),
+              subtitle: Text('Enter the address and code it shows.'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, false),
+            child: const ListTile(
+              leading: Icon(Icons.wifi_tethering),
+              title: Text('Let another device connect here'),
+              subtitle: Text('This device shows an address and a code.'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    asClient = choice;
+  } else {
+    asClient = _isMobile;
+  }
+  await showDialog<void>(
+    context: context,
+    builder: (_) => asClient ? const SyncNowDialog() : const SyncServerDialog(),
+  );
+}
+
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -60,11 +100,7 @@ class LibraryScreen extends ConsumerWidget {
           IconButton(
             icon: Icon(_isMobile ? Icons.sync : Icons.wifi_tethering),
             tooltip: _isMobile ? 'Sync now' : 'Sync with the phone',
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) =>
-                  _isMobile ? const SyncNowDialog() : const SyncServerDialog(),
-            ),
+            onPressed: () => _openSync(context),
           ),
         ],
       ),
