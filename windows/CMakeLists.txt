@@ -53,6 +53,33 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# Pre-populate ONNX Runtime from NuGet so flutter_onnxruntime does not fail
+# trying to download the unavailable GitHub release archive.
+set(ONNXRUNTIME_VERSION "1.28.0")
+set(_ort_arch "x64")
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(_ort_arch "x86")
+endif()
+set(_ort_dir "${CMAKE_BINARY_DIR}/plugins/flutter_onnxruntime/onnxruntime/onnxruntime-win-${_ort_arch}-${ONNXRUNTIME_VERSION}")
+if(NOT EXISTS "${_ort_dir}/include/onnxruntime_cxx_api.h")
+  set(_ort_nupkg "${CMAKE_BINARY_DIR}/onnxruntime.nupkg")
+  set(_ort_tmp "${CMAKE_BINARY_DIR}/onnxruntime_extract")
+  file(DOWNLOAD
+    "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ONNXRUNTIME_VERSION}/microsoft.ml.onnxruntime.${ONNXRUNTIME_VERSION}.nupkg"
+    "${_ort_nupkg}"
+    STATUS _ort_dl_status)
+  list(GET _ort_dl_status 0 _ort_dl_code)
+  if(NOT _ort_dl_code EQUAL 0)
+    message(FATAL_ERROR "Failed to download ONNX Runtime NuGet package: ${_ort_dl_status}")
+  endif()
+  file(ARCHIVE_EXTRACT INPUT "${_ort_nupkg}" DESTINATION "${_ort_tmp}")
+  file(MAKE_DIRECTORY "${_ort_dir}/include" "${_ort_dir}/lib")
+  file(COPY "${_ort_tmp}/build/native/include/" DESTINATION "${_ort_dir}/include")
+  file(COPY "${_ort_tmp}/runtimes/win-${_ort_arch}/native/" DESTINATION "${_ort_dir}/lib")
+  file(REMOVE "${_ort_nupkg}")
+  file(REMOVE_RECURSE "${_ort_tmp}")
+endif()
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
