@@ -1,0 +1,47 @@
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'tool/**'
+      - 'integration_test/**'
+      - 'windows/**'
+      - 'assets/**'
+      - 'pubspec.*'
+      - '.github/workflows/windows.yml'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.7'
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build Windows release
+        shell: bash
+        run: |
+          flutter build windows --release \
+            --build-number="$(git rev-list --count HEAD)"
+
+      - name: Package the Windows build
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Intellego-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: intellego-windows-x64
+          path: Intellego-windows-x64.zip
+          if-no-files-found: error
